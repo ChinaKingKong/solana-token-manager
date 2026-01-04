@@ -2,12 +2,9 @@
 
 一个基于 Vue 3、TypeScript 和 Solana 区块链的代币管理系统，提供完整的 Solana SPL 代币管理功能。
 
-![代币列表Demo](/src/assets/Demo1.jpg)
-![创建代币Demo](/src/assets/Demo2.jpg)
-![铸造代币Demo](/src/assets/Demo3.jpg)
-![销毁代币Demo](/src/assets/Demo4.jpg)
-![IPFS上传Demo](/src/assets/Demo5.jpg)
-![交易历史Demo](/src/assets/Demo6.jpg)
+![代币列表Demo](/src/assets/Demo1.jpg)![创建代币Demo](/src/assets/Demo2.jpg)
+![铸造代币Demo](/src/assets/Demo3.jpg)![销毁代币Demo](/src/assets/Demo4.jpg)
+![IPFS上传Demo](/src/assets/Demo5.jpg)![交易历史Demo](/src/assets/Demo6.jpg)
 
 ## 功能特性
 
