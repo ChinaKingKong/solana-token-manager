@@ -55,41 +55,162 @@ const currentPage = computed(() => {
 </script>
 
 <template>
-  <div 
-    class="fixed top-0 right-0 h-20 z-[999] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] md:left-0 md:h-[70px]" 
-    :class="sidebarCollapsed ? 'left-20' : 'left-[240px]'"
-  >
-    <div class="w-full h-full bg-gradient-to-r from-[rgba(11,19,43,0.98)] to-[rgba(26,34,53,0.98)] backdrop-blur-[20px] shadow-[0_2px_20px_rgba(0,0,0,0.3)] flex flex-col relative">
-      <div class="w-full h-full flex items-center justify-between px-4 pr-[10px] gap-6 md:px-4 md:pr-[10px] md:gap-4">
+  <div class="header" :class="{ 'header-collapsed': sidebarCollapsed }">
+    <div class="header-inner">
+      <div class="header-content">
         <!-- 左侧页面指示区域 -->
-        <div class="flex items-center flex-1 min-w-0" style="flex: 1 1 auto; min-width: 0; display: flex !important; align-items: center !important; overflow: visible !important; position: relative !important; z-index: 10 !important;">
-          <div 
-            v-if="currentPage && currentPage.title"
-            class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all duration-300 ease-in-out hover:bg-white/5"
-            style="display: flex !important; align-items: center !important; gap: 8px !important; padding: 8px 12px !important; border-radius: 8px !important; visibility: visible !important; opacity: 1 !important; width: auto !important; min-width: fit-content !important; position: relative !important; z-index: 10 !important; background: transparent !important;"
-          >
-            <component 
-              :is="currentPage.icon" 
-              style="font-size: 16px !important; color: #14F195 !important; flex-shrink: 0 !important; display: inline-block !important; width: 16px !important; height: 16px !important; visibility: visible !important; opacity: 1 !important; line-height: 1 !important; vertical-align: middle !important;"
-            />
-            <span 
-              style="font-size: 14px !important; font-weight: 500 !important; color: rgba(255, 255, 255, 0.9) !important; letter-spacing: 0.5px !important; white-space: nowrap !important; display: inline-block !important; visibility: visible !important; opacity: 1 !important; line-height: 1.5 !important; vertical-align: middle !important;"
-            >
-              {{ currentPage.title }}
-            </span>
-            <RightOutlined 
-              style="font-size: 14px !important; color: rgba(255, 255, 255, 0.5) !important; flex-shrink: 0 !important; margin-left: 2px !important; display: inline-block !important; width: 14px !important; height: 14px !important; visibility: visible !important; opacity: 1 !important; line-height: 1 !important; vertical-align: middle !important;"
-            />
+        <div class="header-left">
+          <div class="page-indicator" v-if="currentPage && currentPage.title">
+            <component :is="currentPage.icon" class="indicator-icon" />
+            <span class="indicator-text">{{ currentPage.title }}</span>
+            <RightOutlined class="arrow-icon" />
           </div>
         </div>
 
         <!-- 右侧钱包区域 -->
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="header-right">
           <Wallet />
         </div>
       </div>
-      <div class="w-full h-px bg-gradient-to-r from-transparent via-[rgba(20,241,149,0.3)] via-[rgba(153,69,255,0.4)] via-[rgba(20,241,149,0.3)] to-transparent shrink-0 absolute bottom-0 left-0"></div>
+      <div class="header-border"></div>
     </div>
   </div>
 </template>
 
+<style scoped>
+.header {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 240px;
+  height: 80px;
+  z-index: 999;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.header-collapsed {
+  left: 80px;
+}
+
+.header-inner {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(11, 19, 43, 0.98) 0%, rgba(26, 34, 53, 0.98) 100%);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px;
+  width: 100%;
+  height: calc(100% - 1px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+/* 页面指示区域 */
+.page-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.page-indicator:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.indicator-icon {
+  font-size: 16px;
+  color: #14F195;
+  flex-shrink: 0;
+}
+
+.indicator-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.5px;
+}
+
+.arrow-icon {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+}
+
+/* 右侧钱包区域 */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+/* 底部分割线 */
+.header-border {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(20, 241, 149, 0.3) 15%,
+    rgba(153, 69, 255, 0.4) 50%,
+    rgba(20, 241, 149, 0.3) 85%,
+    transparent 100%
+  );
+  flex-shrink: 0;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .header {
+    left: 0;
+    height: 70px;
+  }
+
+  .header-content {
+    padding: 0 16px;
+    gap: 16px;
+  }
+
+  .header-left {
+    gap: 16px;
+  }
+
+  .page-indicator {
+    padding: 6px 12px;
+    gap: 6px;
+  }
+
+  .indicator-icon {
+    font-size: 14px;
+  }
+
+  .indicator-text {
+    font-size: 13px;
+  }
+
+  .arrow-icon {
+    font-size: 12px;
+  }
+}
+</style>
