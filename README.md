@@ -52,6 +52,8 @@ src/
 │   └── wallet.vue       # 钱包连接组件
 ├── hooks/               # 自定义 Hooks
 │   └── useWallet.ts    # 钱包管理 Hook
+├── config/              # 配置文件
+│   └── rpc.ts          # RPC 端点配置
 ├── providers/           # 提供者组件
 │   └── WalletProvider.vue
 ├── views/               # 页面视图
@@ -83,6 +85,31 @@ src/
 npm install
 ```
 
+### 环境变量配置
+
+项目使用环境变量来配置 Solana RPC 端点。请按照以下步骤配置：
+
+1. 在项目根目录创建 `.env` 文件（如果不存在）
+2. 添加以下环境变量：
+
+```env
+# Solana RPC 端点配置
+VITE_SOLANA_MAINNET_RPC=https://solana-mainnet.g.alchemy.com/v2/your-api-key
+VITE_SOLANA_DEVNET_RPC=https://solana-devnet.g.alchemy.com/v2/your-api-key
+```
+
+**获取 Alchemy API 密钥：**
+1. 访问 [Alchemy Dashboard](https://dashboard.alchemy.com/)
+2. 注册/登录账号
+3. 创建新的 Solana 应用
+4. 在应用详情页复制 HTTP API URL（包含 API 密钥）
+5. 将 URL 替换到 `.env` 文件中的 `your-api-key` 部分
+
+**注意：**
+- 环境变量必须以 `VITE_` 开头才能在客户端代码中访问
+- `.env` 文件已添加到 `.gitignore`，不会被提交到版本控制
+- 修改 `.env` 文件后需要重启开发服务器才能生效
+
 ### 启动开发服务器
 
 ```bash
@@ -113,7 +140,8 @@ npm run preview
 
 - 点击右上角的网络切换按钮
 - 选择"主网"或"测试网"
-- RPC 连接会自动更新
+- RPC 连接会自动更新（使用 `.env` 中配置的对应网络 RPC 端点）
+- 如果未配置环境变量，将使用 Solana 的公共 RPC 端点（可能有速率限制）
 
 ### 创建代币
 
@@ -146,13 +174,33 @@ npm run preview
 4. 上传内容到 IPFS
 5. 复制生成的 IPFS 链接
 
+## 配置说明
+
+### RPC 端点配置
+
+项目支持通过环境变量配置 Solana RPC 端点，推荐使用 Alchemy 或其他 RPC 服务提供商：
+
+- **优势**：更高的请求速率限制、更稳定的连接、更好的性能
+- **配置**：在 `.env` 文件中设置 `VITE_SOLANA_MAINNET_RPC` 和 `VITE_SOLANA_DEVNET_RPC`
+- **默认值**：如果未配置，将使用 Solana 的公共 RPC 端点（可能有速率限制，如 429 错误）
+
+### Pinata IPFS 配置
+
+IPFS 上传功能使用 Pinata 服务，需要在页面中配置 API 密钥：
+
+- 访问 [Pinata](https://www.pinata.cloud/) 注册账号
+- 在 API Keys 页面创建新的 API Key
+- 在"IPFS上传"页面输入 API Key 和 Secret Key
+
 ## 注意事项
 
-- 生产环境中，Pinata API 密钥应通过后端服务处理，避免暴露在前端
-- 所有交易操作需要支付 Solana 网络手续费（SOL）
-- 冻结/解冻操作需要代币的冻结权限
-- 销毁代币是不可逆操作，请谨慎操作
-- 建议在测试网上先测试功能
+- **环境变量**：`.env` 文件包含敏感信息，已添加到 `.gitignore`，不会被提交到版本控制
+- **RPC 配置**：建议配置 Alchemy 或其他 RPC 服务，避免使用公共端点时的速率限制问题
+- **生产环境**：Pinata API 密钥应通过后端服务处理，避免暴露在前端
+- **交易费用**：所有交易操作需要支付 Solana 网络手续费（SOL）
+- **权限要求**：冻结/解冻操作需要代币的冻结权限
+- **不可逆操作**：销毁代币是不可逆操作，请谨慎操作
+- **测试建议**：建议在测试网上先测试功能，确认无误后再在主网操作
 
 ## 许可证
 
