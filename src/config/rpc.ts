@@ -2,10 +2,10 @@
  * Solana RPC 端点配置
  */
 
-// RPC 端点配置
+// RPC 端点配置（从环境变量读取）
 export const RPC_ENDPOINTS = {
-  mainnet: 'https://solana-mainnet.g.alchemy.com/v2/aGpzH_QuHb5nBTL9KeE59crV6FAaO-p0',
-  devnet: 'https://solana-devnet.g.alchemy.com/v2/aGpzH_QuHb5nBTL9KeE59crV6FAaO-p0',
+  mainnet: import.meta.env.VITE_SOLANA_MAINNET_RPC || 'https://api.mainnet-beta.solana.com',
+  devnet: import.meta.env.VITE_SOLANA_DEVNET_RPC || 'https://api.devnet.solana.com',
 } as const;
 
 // 网络类型
