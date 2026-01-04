@@ -1,0 +1,29 @@
+{
+  "name": "solana-token-manager",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
+    "@solana/spl-token": "^0.4.0",
+    "@solana/web3.js": "^1.91.1",
+    "ant-design-vue": "^4.2.6",
+    "vue": "^3.4.21",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/tsconfig": "^0.7.0",
+    "typescript": "^5.4.2",
+    "vite": "^5.1.5",
+    "vue-tsc": "^2.0.6"
+  },
+  "description": "Solana代币管理系统，用于创建、铸造、管理Solana上的代币",
+  "author": "Your Name",
+  "license": "MIT"
+}
