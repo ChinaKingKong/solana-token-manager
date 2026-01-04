@@ -60,17 +60,10 @@ export function useWalletProvider() {
   const connectWallet = async (walletAdapter: any) => {
     if (connecting.value) return;
 
-    console.log('🔑 开始连接钱包...');
-    console.log('钱包适配器:', walletAdapter.name);
-
     connecting.value = true;
     try {
       await walletAdapter.connect();
       wallet.value = walletAdapter;
-
-      console.log('钱包连接成功');
-      console.log('公钥对象:', walletAdapter.publicKey);
-      console.log('公钥类型:', typeof walletAdapter.publicKey);
 
       if (!walletAdapter.publicKey) {
         throw new Error('钱包公钥为空');
@@ -79,14 +72,12 @@ export function useWalletProvider() {
       publicKey.value = walletAdapter.publicKey;
       connected.value = true;
 
-      console.log('✅ 公钥已设置:', publicKey.value?.toString() || '未知');
-
       // 获取余额
       await fetchBalance();
 
       return true;
     } catch (error) {
-      console.error('❌ 钱包连接失败:', error);
+      console.error('钱包连接失败:', error);
       throw error;
     } finally {
       connecting.value = false;
@@ -100,7 +91,7 @@ export function useWalletProvider() {
         const result = await connectWallet(walletAdapter);
         if (result) return true;
       } catch (error) {
-        console.log(`${walletAdapter.name} 连接失败，尝试下一个钱包`);
+        // 尝试下一个钱包
       }
     }
     return false;
@@ -133,18 +124,10 @@ export function useWalletProvider() {
     }
 
     try {
-      console.log('正在获取SOL余额...');
-      console.log('公钥:', publicKey.value.toString());
-      console.log('RPC端点:', connection.value.rpcEndpoint);
-
       const lamports = await connection.value.getBalance(publicKey.value);
       balance.value = lamports / LAMPORTS_PER_SOL;
-
-      console.log('✅ 成功获取SOL余额:', balance.value, 'SOL');
-      console.log('Lamports:', lamports);
     } catch (error: any) {
-      console.error('❌ 获取SOL余额失败:', error);
-      console.error('错误详情:', error.message);
+      console.error('获取SOL余额失败:', error);
       balance.value = 0;
     }
   };

@@ -44,12 +44,6 @@ const pageConfigs: PageConfig[] = [
 // 当前页面配置
 const currentPage = computed(() => {
   const page = pageConfigs.find(page => page.key === props.activeKey) || pageConfigs[0];
-  console.log('Header - activeKey:', props.activeKey);
-  console.log('Header - currentPage:', page);
-  console.log('Header - page.icon:', page.icon);
-  console.log('Header - page.title:', page.title);
-  console.log('Header - page exists:', !!page);
-  console.log('Header - page.title exists:', !!page?.title);
   return page;
 });
 </script>

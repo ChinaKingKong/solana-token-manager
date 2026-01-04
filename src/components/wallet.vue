@@ -109,26 +109,14 @@ const detectWallets = () => {
   });
 };
 
-// 判断是否显示分割线（在Phantom和Coinbase之间）
+// 判断是否显示分割线（在每个钱包之间，除了最后一个）
 const shouldShowDivider = (wallet: any, index: number) => {
-  const currentName = wallet.name || '';
-  const isPhantom = currentName === 'Phantom' || currentName.includes('Phantom');
-  
-  if (!isPhantom || index >= availableWallets.value.length - 1) {
-    return false;
-  }
-  
-  const nextWallet = availableWallets.value[index + 1];
-  const nextName = nextWallet?.name || '';
-  const isCoinbase = nextName === 'Coinbase' || nextName === 'Coinbase Wallet' || nextName.includes('Coinbase');
-  
-  return isCoinbase;
+  // 在每个钱包之间显示分割线，除了最后一个
+  return index < availableWallets.value.length - 1;
 };
 
 const availableWallets = computed(() => {
   const wallets = detectWallets();
-  // 调试：输出钱包列表
-  console.log('可用钱包列表:', wallets.map((w: any) => w.name));
   return wallets;
 });
 </script>
@@ -192,14 +180,14 @@ const availableWallets = computed(() => {
       width="360px"
       class="wallet-selector-modal"
     >
-      <div class="flex flex-col max-h-[500px] overflow-y-auto gap-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-track]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-white/15 [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb:hover]:bg-white/25">
+      <div class="wallet-list-container">
         <template v-for="(wallet, index) in availableWallets" :key="wallet.name">
           <div
             class="flex items-center justify-between px-4 py-[18px] bg-transparent cursor-pointer transition-all duration-200 ease-in-out hover:bg-white/5 active:bg-white/[0.06]"
             @click="handleSelectWallet(wallet)"
           >
             <div class="flex items-center gap-3.5 flex-1">
-              <div class="w-11 h-11 flex items-center justify-center shrink-0 bg-white/5 rounded-full p-2">
+              <div class="w-14 h-14 flex items-center justify-center shrink-0 bg-white/5 rounded-full p-2">
                 <img
                   v-if="wallet.icon"
                   :src="wallet.icon"
@@ -218,8 +206,7 @@ const availableWallets = computed(() => {
           </div>
           <div
             v-if="shouldShowDivider(wallet, index)"
-            class="h-px bg-white/20 m-0"
-            style="height: 1px !important; background: rgba(255, 255, 255, 0.2) !important; margin: 0 !important; width: 100% !important;"
+            class="wallet-divider"
           ></div>
         </template>
       </div>
@@ -272,6 +259,51 @@ const availableWallets = computed(() => {
 :deep(.connect-btn:not(:disabled):focus-visible) {
   outline: none;
   box-shadow: 0 6px 20px rgba(20, 241, 149, 0.4);
+}
+
+/* 钱包分割线 */
+.wallet-divider {
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(20, 241, 149, 0.5) 10%,
+    rgba(20, 241, 149, 0.5) 50%,
+    rgba(153, 69, 255, 0.5) 50%,
+    rgba(153, 69, 255, 0.5) 90%,
+    transparent 100%
+  );
+  margin: 8px 0;
+  width: 100%;
+  flex-shrink: 0;
+  display: block;
+}
+
+/* 钱包列表容器 */
+.wallet-list-container {
+  display: flex;
+  flex-direction: column;
+  max-height: 500px;
+  overflow-y: auto;
+  gap: 0;
+}
+
+.wallet-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.wallet-list-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.wallet-list-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.wallet-list-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* 自定义模态框样式 */

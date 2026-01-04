@@ -25,13 +25,10 @@ const walletState = walletContext.walletState;
 // connection 在 useWallet 中是一个 ref，需要访问 .value
 const connection = computed(() => {
   const conn = walletContext.connection;
-  console.log('walletContext.connection:', conn);
   // connection 可能是 ref，也可能是直接的 Connection 对象
   if (conn && typeof conn === 'object' && 'value' in conn) {
-    console.log('connection 是 ref，访问 .value');
     return conn.value;
   }
-  console.log('connection 是直接对象');
   return conn;
 });
 const fetchBalance = walletContext.fetchBalance;
@@ -98,23 +95,19 @@ const refreshBalance = async () => {
 // 获取代币列表
 const fetchTokenList = async () => {
   if (!walletState.value) {
-    console.warn('❌ 钱包状态未初始化');
     return;
   }
 
-  console.log('检查钱包状态:', {
     connected: walletState.value.connected,
     hasPublicKey: !!walletState.value.publicKey,
     publicKey: walletState.value.publicKey?.toString()
   });
 
   if (!walletState.value.connected) {
-    console.warn('❌ 钱包未连接');
     return;
   }
 
   if (!walletState.value.publicKey) {
-    console.warn('❌ 公钥为空');
     message.error('钱包公钥无效，请重新连接钱包');
     return;
   }
@@ -123,7 +116,6 @@ const fetchTokenList = async () => {
 
   // 定义直接 RPC 调用方法
   const fetchTokenAccountsDirectRPC = async () => {
-    console.log('🔄 使用直接 RPC 调用方法');
     const publicKey = walletState.value.publicKey!;
 
     // Solana RPC getTokenAccountsByOwner 的正确参数格式：
@@ -155,7 +147,6 @@ const fetchTokenList = async () => {
     });
 
     const data = await response.json();
-    console.log('✅ RPC 响应:', data);
 
     if (data.error) {
       console.error('RPC 错误详情:', data.error);
@@ -166,12 +157,7 @@ const fetchTokenList = async () => {
   };
 
   try {
-    console.log('🔄 开始获取代币列表...');
-    console.log('钱包公钥:', walletState.value.publicKey.toString());
     const conn = connection.value;
-    console.log('Connection对象:', conn);
-    console.log('Connection类型:', conn?.constructor?.name);
-    console.log('RPC端点:', conn?.rpcEndpoint);
 
     if (!conn) {
       throw new Error('Connection对象未初始化');
@@ -179,20 +165,15 @@ const fetchTokenList = async () => {
 
     // 确保 PublicKey 对象有效
     const publicKey = walletState.value.publicKey;
-    console.log('PublicKey 类型:', publicKey.constructor.name);
-    console.log('PublicKey 实例:', publicKey);
 
     // 尝试使用 getAccountInfo 先测试 RPC 连接
-    console.log('测试 RPC 连接...');
     const accountInfo = await conn.getAccountInfo(publicKey);
-    console.log('✅ RPC 连接正常，账户信息:', accountInfo);
 
     let tokenAccountsResponse;
 
     // 尝试使用 getTokenAccountsByOwner 方法
     // 如果失败则使用直接的 RPC 调用
     try {
-      console.log('调用 getTokenAccountsByOwner...');
       if (!publicKey) {
         throw new Error('PublicKey 对象无效');
       }
@@ -205,15 +186,10 @@ const fetchTokenList = async () => {
           encoding: 'jsonParsed'
         }
       );
-      console.log('✅ getTokenAccountsByOwner 成功');
     } catch (error1: any) {
-      console.warn('⚠️ getTokenAccountsByOwner 失败:', error1.message);
-      console.log('🔄 切换到直接 RPC 调用...');
       tokenAccountsResponse = await fetchTokenAccountsDirectRPC();
     }
 
-    console.log('✅ 获取到的代币账户响应:', tokenAccountsResponse);
-    console.log('响应结构:', {
       hasContext: !!tokenAccountsResponse.context,
       hasValue: !!tokenAccountsResponse.value,
       valueLength: tokenAccountsResponse.value?.length
@@ -223,13 +199,11 @@ const fetchTokenList = async () => {
 
     // getTokenAccountsByOwner 返回 { context, value } 结构
     const accounts = tokenAccountsResponse.value || [];
-    console.log('处理的代币账户数组:', accounts);
 
     for (const account of accounts) {
       try {
         // 安全检查
         if (!account || !account.account || !account.account.data) {
-          console.warn('⚠️ 账户数据不完整，跳过:', account);
           continue;
         }
 
@@ -237,7 +211,6 @@ const fetchTokenList = async () => {
         
         // 检查 parsed 数据
         if (!accountData.parsed || !accountData.parsed.info) {
-          console.warn('⚠️ 账户解析数据不完整，跳过:', account);
           continue;
         }
 
@@ -246,13 +219,11 @@ const fetchTokenList = async () => {
 
         // 检查 pubkey
         if (!account.pubkey) {
-          console.warn('⚠️ 账户公钥不存在，跳过:', account);
           continue;
         }
 
         const pubkeyString = account.pubkey.toString ? account.pubkey.toString() : String(account.pubkey);
 
-        console.log(`📊 代币信息:`, {
           mint: parsedData.info.mint,
           ata: pubkeyString,
           余额: tokenAmount.uiAmountString,
@@ -272,7 +243,6 @@ const fetchTokenList = async () => {
     }
 
     tokens.value = tokenList;
-    console.log('✅ 处理后的代币列表:', tokenList);
 
     // 获取代币元数据
     await fetchTokenMetadata();
@@ -311,7 +281,6 @@ const fetchTokenList = async () => {
 // 获取代币元数据
 const fetchTokenMetadata = async () => {
   try {
-    console.log('开始获取代币元数据...');
 
     const response = await fetch('https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json', {
       method: 'GET',
@@ -325,12 +294,10 @@ const fetchTokenMetadata = async () => {
     }
 
     const tokenList = await response.json();
-    console.log('获取到的代币元数据数量:', tokenList.tokens.length);
 
     tokens.value = tokens.value.map(token => {
       const metadata = tokenList.tokens.find((t: any) => t.address === token.mint);
       if (metadata) {
-        console.log(`找到代币元数据: ${token.mint} -> ${metadata.symbol}`);
         return {
           ...token,
           symbol: metadata.symbol,
@@ -338,11 +305,9 @@ const fetchTokenMetadata = async () => {
           logoURI: metadata.logoURI,
         };
       }
-      console.log(`未找到代币元数据: ${token.mint}`);
       return token;
     });
 
-    console.log('元数据匹配完成');
   } catch (error: any) {
     console.error('获取代币元数据失败:', error);
     // 元数据获取失败不影响显示，只是没有图标和名称
@@ -376,7 +341,6 @@ const copyAddress = (address: string, type: string = '地址') => {
 // 转账功能
 const handleTransfer = (token: TokenData) => {
   // 触发转账事件，传递代币信息
-  console.log('转账:', token);
   message.info(`转账功能开发中，代币: ${token.symbol || 'Unknown'}`);
   // TODO: 导航到转账页面并传递代币信息
 };

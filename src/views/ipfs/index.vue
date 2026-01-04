@@ -73,7 +73,6 @@ const validateApiKey = async () => {
 
 // 处理已上传的JSON内容
 const editUploadedJson = () => {
-  console.log('编辑按钮被点击', uploadedJsonContent.value);
   
   // 先设置编辑模式标志，防止watch触发时重置状态
   isEditingUploadedJson.value = true;
@@ -81,7 +80,6 @@ const editUploadedJson = () => {
   // 提取并保存原始CID
   if (uploadedUrl.value) {
     originalCID.value = extractCIDFromURL(uploadedUrl.value);
-    console.log('保存原始CID:', originalCID.value);
   }
   
   if (uploadedJsonContent.value) {
@@ -101,7 +99,6 @@ const editUploadedJson = () => {
 
 // 处理上传模式变更
 watch(uploadMode, (newMode, oldMode) => {
-  console.log('上传模式变更:', oldMode, '->', newMode, '编辑模式:', isEditingUploadedJson.value);
   
   // 如果不是在编辑已上传的JSON，则重置上传状态
   if (!isEditingUploadedJson.value) {
@@ -112,7 +109,6 @@ watch(uploadMode, (newMode, oldMode) => {
     originalCID.value = null;
   } else {
     // 如果是编辑模式，保持上传状态和内容
-    console.log('保持编辑状态，不重置');
   }
 });
 
@@ -167,7 +163,6 @@ const handleFileUpload = async () => {
             try {
               const jsonData = JSON.parse(e.target?.result as string);
               uploadedJsonContent.value = jsonData;
-              console.log('从文件中解析的JSON:', jsonData);
             } catch (parseError) {
               console.error('解析JSON文件失败:', parseError);
             }
@@ -213,24 +208,20 @@ const handleJsonUpload = async () => {
   try {
     // 验证JSON格式
     const jsonData = JSON.parse(jsonContent.value);
-    console.log('准备上传的JSON数据:', jsonData);
     
     let result;
     const isUpdatingContent = isEditingUploadedJson.value && keepOriginalUrl.value && originalCID.value;
     
     // 如果是编辑模式且选择保持原URL，则使用更新功能
     if (isUpdatingContent && originalCID.value) { // 确保originalCID不为null
-      console.log('使用更新模式，保持原URL', originalCID.value);
       result = await updateIPFSContent(
         originalCID.value,
         jsonData,
         pinataApiKey.value,
         pinataSecretApiKey.value
       );
-      console.log('更新结果:', result);
     } else {
       // 否则使用常规上传
-      console.log('使用常规上传模式');
       result = await uploadJSONToIPFS(
         jsonData,
         pinataApiKey.value,
@@ -248,7 +239,6 @@ const handleJsonUpload = async () => {
         const updateResult = result as { actualUrl?: string };
         if (updateResult.actualUrl) {
           const newUrl = updateResult.actualUrl;
-          console.log('实际新URL:', newUrl);
           // 保存实际新URL，以便显示给用户
           localStorage.setItem('lastActualNewUrl', newUrl);
           actualNewUrl.value = newUrl;
@@ -266,7 +256,6 @@ const handleJsonUpload = async () => {
           originalCID.value = newCid;
         }
       }
-      console.log('设置originalCID:', originalCID.value);
       
       uploadStatus.value = 'success';
       
@@ -347,7 +336,6 @@ const useNewLink = () => {
 
 // 组件挂载时的初始化
 onMounted(() => {
-  console.log('组件挂载，初始化状态');
   uploadStatus.value = 'idle';
   isEditingUploadedJson.value = false;
   uploadedJsonContent.value = null;
