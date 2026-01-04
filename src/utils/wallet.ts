@@ -1,59 +1,67 @@
-import { Connection, PublicKey, clusterApiUrl, Keypair } from '@solana/web3.js';
-import { ref } from 'vue';
+import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+import { ref, computed } from 'vue';
 
-// 创建Solana连接
+// 创建Solana连接（保持向后兼容）
 export const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
 
-// 钱包状态
+// 导入钱包状态（从useWallet上下文）
+// 这些导出是为了向后兼容，但推荐直接使用 useWallet() Hook
 export const connected = ref(false);
 export const walletAddress = ref('');
 export const walletPublicKey = ref<PublicKey | null>(null);
 export const walletBalance = ref(0);
 
-// 当前使用的钱包或临时生成的Keypair
-let currentWallet: Keypair | null = null;
+// 当前使用的钱包适配器
+let currentWalletAdapter: any = null;
 
-// 连接钱包
-export const connectWallet = async () => {
-  try {
-    // 这里简化处理，实际应用中应使用真实的钱包适配器如Phantom、Solflare等
-    // 在这个示例中，我们生成一个临时的钱包用于演示
-    currentWallet = Keypair.generate();
-    walletPublicKey.value = currentWallet.publicKey;
-    walletAddress.value = currentWallet.publicKey.toString().slice(0, 4) + '..' + 
-                          currentWallet.publicKey.toString().slice(-4);
-    
-    // 获取钱包余额
-    await updateBalance();
-    
-    connected.value = true;
-    return true;
-  } catch (error) {
-    console.error('连接钱包失败:', error);
-    return false;
+// 更新钱包状态（供钱包组件调用）
+export function setWalletState(adapter: any, pubKey: PublicKey | null) {
+  currentWalletAdapter = adapter;
+  walletPublicKey.value = pubKey;
+  connected.value = !!pubKey;
+
+  if (pubKey) {
+    walletAddress.value = pubKey.toString().slice(0, 4) + '..' + pubKey.toString().slice(-4);
+  } else {
+    walletAddress.value = '';
   }
-};
+}
 
-// 断开钱包连接
-export const disconnectWallet = () => {
-  currentWallet = null;
+// 更新余额
+export async function updateBalance() {
+  if (!walletPublicKey.value) return;
+
+  try {
+    const balance = await connection.getBalance(walletPublicKey.value);
+    walletBalance.value = balance / 1e9; // 转换为SOL
+  } catch (error) {
+    console.error('获取余额失败:', error);
+  }
+}
+
+// 连接钱包（保留向后兼容，但现在推荐使用 useWallet Hook）
+export async function connectWallet() {
+  // 这个函数现在主要作为向后兼容的接口
+  // 实际的钱包连接逻辑在 useWallet Hook 中
+  console.warn('connectWallet 已弃用，请使用 useWallet Hook 代替');
+  return false;
+}
+
+// 断开钱包连接（保留向后兼容）
+export function disconnectWallet() {
+  currentWalletAdapter = null;
   walletPublicKey.value = null;
   walletAddress.value = '';
   walletBalance.value = 0;
   connected.value = false;
-};
+}
 
-// 更新钱包余额
-export const updateBalance = async () => {
-  if (!walletPublicKey.value) return;
-  
-  try {
-    const balance = await connection.getBalance(walletPublicKey.value);
-    walletBalance.value = balance / 10**9; // 转换为SOL
-  } catch (error) {
-    console.error('获取余额失败:', error);
-  }
-};
+// 获取当前钱包适配器
+export function getCurrentWallet() {
+  return currentWalletAdapter;
+}
 
-// 获取当前钱包
-export const getCurrentWallet = () => currentWallet; 
+// 获取钱包公钥
+export function getWalletPublicKey() {
+  return walletPublicKey.value;
+}
