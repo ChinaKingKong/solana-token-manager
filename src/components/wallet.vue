@@ -25,8 +25,13 @@ const getWalletDisplayText = computed(() => {
   }
 
   if (walletState.value.publicKey) {
-    const publicKeyStr = walletState.value.publicKey.toBase58();
-    return `${publicKeyStr.slice(0, 4)}...${publicKeyStr.slice(-4)}`;
+    try {
+      const publicKeyStr = walletState.value.publicKey.toBase58();
+      return `${publicKeyStr.slice(0, 4)}...${publicKeyStr.slice(-4)}`;
+    } catch (error) {
+      console.error('获取公钥字符串失败:', error);
+      return "地址错误";
+    }
   }
 
   return "连接钱包";
@@ -34,7 +39,11 @@ const getWalletDisplayText = computed(() => {
 
 // 获取余额显示
 const balanceDisplay = computed(() => {
-  return walletState.value.balance.toFixed(4);
+  const balance = walletState.value.balance;
+  if (typeof balance !== 'number' || isNaN(balance)) {
+    return '0.0000';
+  }
+  return balance.toFixed(4);
 });
 
 // 连接钱包
@@ -91,51 +100,70 @@ const detectWallets = () => {
     if (wallet.name === 'Phantom') {
       return (window as any).solana?.isPhantom || (window as any).solanaPhantom;
     }
-    // 检测Coinbase钱包
-    if (wallet.name === 'Coinbase') {
-      return (window as any).coinbaseSolana;
+    // Coinbase钱包总是显示（即使未安装，用户也可以看到并安装）
+    if (wallet.name === 'Coinbase' || wallet.name === 'Coinbase Wallet' || wallet.name?.includes('Coinbase')) {
+      return true;
     }
     // 其他钱包默认返回true
     return true;
   });
 };
 
+// 判断是否显示分割线（在Phantom和Coinbase之间）
+const shouldShowDivider = (wallet: any, index: number) => {
+  const currentName = wallet.name || '';
+  const isPhantom = currentName === 'Phantom' || currentName.includes('Phantom');
+  
+  if (!isPhantom || index >= availableWallets.value.length - 1) {
+    return false;
+  }
+  
+  const nextWallet = availableWallets.value[index + 1];
+  const nextName = nextWallet?.name || '';
+  const isCoinbase = nextName === 'Coinbase' || nextName === 'Coinbase Wallet' || nextName.includes('Coinbase');
+  
+  return isCoinbase;
+};
+
 const availableWallets = computed(() => {
-  return detectWallets();
+  const wallets = detectWallets();
+  // 调试：输出钱包列表
+  console.log('可用钱包列表:', wallets.map((w: any) => w.name));
+  return wallets;
 });
 </script>
 
 <template>
-  <div class="wallet-container">
+  <div class="flex items-center">
     <!-- 已连接状态 -->
-    <div v-if="walletState.connected" class="wallet-connected-wrapper">
+    <div v-if="walletState.connected" class="flex items-center">
       <a-dropdown
         v-model:open="showWalletMenu"
         trigger="click"
         placement="bottomRight"
         :overlayClassName="'wallet-menu-dropdown'"
       >
-        <div class="wallet-info clickable">
-          <div class="wallet-icon">
-            <img v-if="walletState.wallet?.icon" :src="walletState.wallet.icon" :alt="walletState.wallet?.name" />
-            <span v-else class="default-icon">👛</span>
+        <div class="flex items-center gap-3 px-4 py-2 bg-white/10 rounded-xl cursor-pointer transition-all duration-300 ease-in-out hover:bg-white/15">
+          <div class="w-8 h-8 flex items-center justify-center shrink-0">
+            <img v-if="walletState.wallet?.icon" :src="walletState.wallet.icon" :alt="walletState.wallet?.name" class="w-full h-full object-contain" />
+            <WalletOutlined v-else class="text-xl text-white" />
           </div>
-          <div class="wallet-details">
-            <div class="wallet-address">{{ getWalletDisplayText }}</div>
-            <div class="wallet-balance">{{ balanceDisplay }} SOL</div>
+          <div class="flex flex-col gap-0.5">
+            <div class="text-sm font-semibold text-white font-mono">{{ getWalletDisplayText }}</div>
+            <div class="text-xs text-solana-green font-medium">{{ balanceDisplay }} SOL</div>
           </div>
-          <DownOutlined class="dropdown-icon" />
+          <DownOutlined class="text-xs text-white/50 font-bold transition-all duration-200 ease-in-out group-hover:text-white/80" />
         </div>
 
         <template #overlay>
-          <a-menu class="wallet-menu">
-            <a-menu-item key="copy" @click="copyAddress" class="wallet-menu-item">
-              <CopyOutlined class="menu-icon" />
+          <a-menu class="bg-white border border-black/10 rounded-lg p-1 min-w-[160px] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+            <a-menu-item key="copy" @click="copyAddress" class="flex items-center gap-2.5 px-3 py-2.5 text-black/85 rounded-md transition-all duration-200 ease-in-out hover:bg-[rgba(20,241,149,0.1)] hover:text-solana-green">
+              <CopyOutlined class="text-sm" />
               <span>复制地址</span>
             </a-menu-item>
             <a-menu-divider />
-            <a-menu-item key="disconnect" @click="handleDisconnect" class="wallet-menu-item disconnect-item">
-              <DisconnectOutlined class="menu-icon" />
+            <a-menu-item key="disconnect" @click="handleDisconnect" class="flex items-center gap-2.5 px-3 py-2.5 text-[rgba(255,77,79,0.85)] rounded-md transition-all duration-200 ease-in-out hover:bg-[rgba(255,77,79,0.1)] hover:text-[#ff4d4f]">
+              <DisconnectOutlined class="text-sm" />
               <span>断开连接</span>
             </a-menu-item>
           </a-menu>
@@ -150,7 +178,7 @@ const availableWallets = computed(() => {
       size="large"
       @click="toggleWalletConnection"
       :loading="walletState.connecting"
-      class="connect-btn"
+      class="bg-gradient-solana border-none text-dark-bg font-semibold px-6 h-11 text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] active:-translate-y-0.5 focus:-translate-y-0.5 focus:shadow-[0_6px_20px_rgba(20,241,149,0.4)] focus:outline-none"
     >
       <template #icon><WalletOutlined /></template>
       {{ walletState.connecting ? '连接中...' : '连接钱包' }}
@@ -164,40 +192,41 @@ const availableWallets = computed(() => {
       width="360px"
       class="wallet-selector-modal"
     >
-      <div class="wallet-list">
+      <div class="flex flex-col max-h-[500px] overflow-y-auto gap-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-track]:rounded-sm [&::-webkit-scrollbar-thumb]:bg-white/15 [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb:hover]:bg-white/25">
         <template v-for="(wallet, index) in availableWallets" :key="wallet.name">
           <div
-            class="wallet-option"
+            class="flex items-center justify-between px-4 py-[18px] bg-transparent cursor-pointer transition-all duration-200 ease-in-out hover:bg-white/5 active:bg-white/[0.06]"
             @click="handleSelectWallet(wallet)"
           >
-            <div class="wallet-option-left">
-              <div class="wallet-icon-wrapper">
+            <div class="flex items-center gap-3.5 flex-1">
+              <div class="w-11 h-11 flex items-center justify-center shrink-0 bg-white/5 rounded-full p-2">
                 <img
                   v-if="wallet.icon"
                   :src="wallet.icon"
                   :alt="wallet.name"
-                  class="wallet-option-icon"
+                  class="w-full h-full object-contain"
                 />
-                <div v-else class="wallet-option-icon-placeholder">
+                <div v-else class="w-full h-full flex items-center justify-center bg-gradient-solana rounded-full text-lg font-bold text-white">
                   {{ wallet.name.charAt(0) }}
                 </div>
               </div>
-              <div class="wallet-option-name">{{ wallet.name }}</div>
+              <div class="text-[15px] font-semibold text-white">{{ wallet.name }}</div>
             </div>
-            <div class="wallet-option-action">
-              <div class="connect-text">Connect</div>
+            <div class="shrink-0">
+              <div class="text-[13px] font-medium text-solana-green px-3.5 py-1.5 rounded-md bg-[rgba(20,241,149,0.1)] transition-all duration-200 ease-in-out group-hover:bg-[rgba(20,241,149,0.15)] group-hover:text-solana-green">Connect</div>
             </div>
           </div>
           <div
-            v-if="index < availableWallets.length - 1"
-            class="wallet-divider"
+            v-if="shouldShowDivider(wallet, index)"
+            class="h-px bg-white/20 m-0"
+            style="height: 1px !important; background: rgba(255, 255, 255, 0.2) !important; margin: 0 !important; width: 100% !important;"
           ></div>
         </template>
       </div>
 
-      <div class="wallet-footer">
-        <p class="footer-text">
-          <small>如果没有安装钱包，请先安装支持的浏览器扩展</small>
+      <div class="mt-6 pt-5 border-t border-white/8">
+        <p class="text-center m-0">
+          <small class="text-white/50 text-xs leading-relaxed">如果没有安装钱包，请先安装支持的浏览器扩展</small>
         </p>
       </div>
     </a-modal>
@@ -205,122 +234,6 @@ const availableWallets = computed(() => {
 </template>
 
 <style scoped>
-.wallet-container {
-  display: flex;
-  align-items: center;
-}
-
-.wallet-connected-wrapper {
-  display: flex;
-  align-items: center;
-}
-
-.wallet-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.wallet-info:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.wallet-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.wallet-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.default-icon {
-  font-size: 20px;
-}
-
-.wallet-details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.wallet-address {
-  font-size: 14px;
-  font-weight: 600;
-  color: #ffffff;
-  font-family: monospace;
-}
-
-.wallet-balance {
-  font-size: 12px;
-  color: #14F195;
-  font-weight: 500;
-}
-
-.dropdown-icon {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  transition: all 0.2s ease;
-}
-
-.wallet-info:hover .dropdown-icon {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-/* 钱包操作菜单样式 */
-.wallet-menu {
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  padding: 4px;
-  min-width: 160px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.wallet-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  color: rgba(0, 0, 0, 0.85);
-  border-radius: 6px;
-  transition: all 0.2s ease;
-}
-
-.wallet-menu-item:hover {
-  background: rgba(20, 241, 149, 0.1);
-  color: #14F195;
-}
-
-.wallet-menu-item .menu-icon {
-  font-size: 14px;
-}
-
-.wallet-menu-item.disconnect-item {
-  color: rgba(255, 77, 79, 0.85);
-}
-
-.wallet-menu-item.disconnect-item:hover {
-  background: rgba(255, 77, 79, 0.1);
-  color: #ff4d4f;
-}
-
-:deep(.ant-dropdown-menu-item-divider) {
-  background: rgba(0, 0, 0, 0.1);
-  margin: 4px 0;
-}
-
 /* 下拉菜单样式覆盖 */
 :deep(.wallet-menu-dropdown) {
   padding: 8px;
@@ -338,26 +251,9 @@ const availableWallets = computed(() => {
   margin: 0;
 }
 
-.connect-btn {
-  background: linear-gradient(135deg, #14F195 0%, #9945FF 100%);
-  border: none;
-  color: #0B132B;
-  font-weight: 600;
-  padding: 0 24px;
-  height: 44px;
-  font-size: 15px;
-}
-
-.connect-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(20, 241, 149, 0.4);
-}
-
-.connect-btn:active,
-.connect-btn:focus {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(20, 241, 149, 0.4);
-  outline: none;
+:deep(.ant-dropdown-menu-item-divider) {
+  background: rgba(0, 0, 0, 0.1);
+  margin: 4px 0;
 }
 
 /* 移除Ant Design按钮的默认焦点样式 */
@@ -378,140 +274,8 @@ const availableWallets = computed(() => {
   box-shadow: 0 6px 20px rgba(20, 241, 149, 0.4);
 }
 
-/* 钱包选择器样式 */
-.wallet-list {
-  display: flex;
-  flex-direction: column;
-  max-height: 500px;
-  overflow-y: auto;
-  gap: 0;
-}
-
-.wallet-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 16px;
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.wallet-divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 0;
-}
-
-.wallet-option:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.wallet-option:active {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.wallet-option-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: 1;
-}
-
-.wallet-icon-wrapper {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 50%;
-  padding: 8px;
-}
-
-.wallet-option-icon {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.wallet-option-icon-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, rgba(20, 241, 149, 0.2) 0%, rgba(153, 69, 255, 0.2) 100%);
-  border-radius: 50%;
-  font-size: 18px;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.wallet-option-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.wallet-option-action {
-  flex-shrink: 0;
-}
-
-.connect-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: #14F195;
-  padding: 6px 14px;
-  border-radius: 6px;
-  background: rgba(20, 241, 149, 0.1);
-  transition: all 0.2s ease;
-}
-
-.wallet-option:hover .connect-text {
-  background: rgba(20, 241, 149, 0.15);
-  color: #14F195;
-}
-
-.wallet-footer {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.footer-text {
-  text-align: center;
-  margin: 0;
-}
-
-.footer-text small {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-/* 滚动条样式 */
-.wallet-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.wallet-list::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 3px;
-}
-
-.wallet-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
-}
-
-.wallet-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
 /* 自定义模态框样式 */
-:deep(.ant-modal-content) {
+:deep(.wallet-selector-modal .ant-modal-content) {
   background: rgba(26, 34, 53, 0.98);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -519,52 +283,41 @@ const availableWallets = computed(() => {
   overflow: hidden;
 }
 
-:deep(.ant-modal-header) {
+:deep(.wallet-selector-modal .ant-modal-header) {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 16px 24px;
   background: rgba(255, 255, 255, 0.02);
 }
 
-:deep(.ant-modal-title) {
+:deep(.wallet-selector-modal .ant-modal-title) {
   color: #ffffff;
   font-size: 17px;
   font-weight: 600;
 }
 
-:deep(.ant-modal-close-x) {
+:deep(.wallet-selector-modal .ant-modal-close-x) {
   color: rgba(255, 255, 255, 0.5);
   width: 40px;
   height: 40px;
   line-height: 40px;
 }
 
-:deep(.ant-modal-close-x:hover) {
+:deep(.wallet-selector-modal .ant-modal-close-x:hover) {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.08);
 }
 
-:deep(.ant-modal-close) {
+:deep(.wallet-selector-modal .ant-modal-close) {
   color: rgba(255, 255, 255, 0.5);
   transition: all 0.2s ease;
 }
 
-:deep(.ant-modal-close:hover) {
+:deep(.wallet-selector-modal .ant-modal-close:hover) {
   color: #ffffff;
 }
 
-:deep(.ant-modal-body) {
+:deep(.wallet-selector-modal .ant-modal-body) {
   padding: 20px 24px;
   color: rgba(255, 255, 255, 0.85);
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .wallet-info {
-    padding: 8px 12px;
-  }
-
-  .wallet-details {
-    gap: 2px;
-  }
 }
 </style>

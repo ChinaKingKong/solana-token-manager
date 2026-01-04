@@ -1,10 +1,10 @@
 import { ref, computed, inject, provide } from 'vue';
-import { Connection, clusterApiUrl, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js'; 
 import {
   PhantomWalletAdapter,
   CoinbaseWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
+import { getRpcEndpoint, DEFAULT_NETWORK, type NetworkType } from '../config/rpc';
 
 // 钱包状态接口
 export interface WalletState {
@@ -19,6 +19,22 @@ export interface WalletState {
 // 钱包上下文Key
 const WALLET_KEY = Symbol('wallet');
 
+// 钱包上下文接口
+export interface WalletContext {
+  walletState: ReturnType<typeof useWalletProvider>['walletState'];
+  supportedWallets: any[];
+  connection: ReturnType<typeof useWalletProvider>['connection'];
+  endpoint: string;
+  network: NetworkType;
+  connectWallet: (walletAdapter: any) => Promise<boolean>;
+  disconnectWallet: () => Promise<void>;
+  autoConnect: () => Promise<boolean>;
+  fetchBalance: () => Promise<void>;
+  sendTransaction: (transaction: any) => Promise<string>;
+  signTransaction: (transaction: any) => Promise<any>;
+  signAllTransactions: (transactions: any[]) => Promise<any[]>;
+}
+
 // 创建钱包提供者Hook
 export function useWalletProvider() {
   // 状态
@@ -30,9 +46,9 @@ export function useWalletProvider() {
   const balance = ref(0);
 
   // 连接配置
-  const network = WalletAdapterNetwork.Devnet;
-  const endpoint = clusterApiUrl(network);
-  const connection = new Connection(endpoint, 'confirmed');
+  const network: NetworkType = DEFAULT_NETWORK;
+  const endpoint = getRpcEndpoint(network);
+  const connection = ref(new Connection(endpoint, 'confirmed'));
 
   // 支持的钱包列表
   const supportedWallets = [
@@ -44,19 +60,33 @@ export function useWalletProvider() {
   const connectWallet = async (walletAdapter: any) => {
     if (connecting.value) return;
 
+    console.log('🔑 开始连接钱包...');
+    console.log('钱包适配器:', walletAdapter.name);
+
     connecting.value = true;
     try {
       await walletAdapter.connect();
       wallet.value = walletAdapter;
+
+      console.log('钱包连接成功');
+      console.log('公钥对象:', walletAdapter.publicKey);
+      console.log('公钥类型:', typeof walletAdapter.publicKey);
+
+      if (!walletAdapter.publicKey) {
+        throw new Error('钱包公钥为空');
+      }
+
       publicKey.value = walletAdapter.publicKey;
       connected.value = true;
+
+      console.log('✅ 公钥已设置:', publicKey.value?.toString() || '未知');
 
       // 获取余额
       await fetchBalance();
 
       return true;
     } catch (error) {
-      console.error('钱包连接失败:', error);
+      console.error('❌ 钱包连接失败:', error);
       throw error;
     } finally {
       connecting.value = false;
@@ -103,10 +133,18 @@ export function useWalletProvider() {
     }
 
     try {
-      const lamports = await connection.getBalance(publicKey.value);
+      console.log('正在获取SOL余额...');
+      console.log('公钥:', publicKey.value.toString());
+      console.log('RPC端点:', connection.value.rpcEndpoint);
+
+      const lamports = await connection.value.getBalance(publicKey.value);
       balance.value = lamports / LAMPORTS_PER_SOL;
-    } catch (error) {
-      console.error('获取余额失败:', error);
+
+      console.log('✅ 成功获取SOL余额:', balance.value, 'SOL');
+      console.log('Lamports:', lamports);
+    } catch (error: any) {
+      console.error('❌ 获取SOL余额失败:', error);
+      console.error('错误详情:', error.message);
       balance.value = 0;
     }
   };
@@ -118,8 +156,8 @@ export function useWalletProvider() {
     }
 
     try {
-      const signature = await wallet.value.sendTransaction(transaction, connection);
-      await connection.confirmTransaction(signature);
+      const signature = await wallet.value.sendTransaction(transaction, connection.value);
+      await connection.value.confirmTransaction(signature);
       return signature;
     } catch (error) {
       console.error('发送交易失败:', error);
@@ -189,8 +227,8 @@ export function useWalletProvider() {
 }
 
 // 使用钱包Hook
-export function useWallet() {
-  const walletContext = inject(WALLET_KEY);
+export function useWallet(): WalletContext {
+  const walletContext = inject<WalletContext>(WALLET_KEY);
 
   if (!walletContext) {
     throw new Error('useWallet must be used within WalletProvider');

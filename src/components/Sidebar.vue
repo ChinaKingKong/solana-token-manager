@@ -98,191 +98,44 @@ const toggleCollapse = () => {
 </script>
 
 <template>
-  <div class="sidebar" :class="{ 'sidebar-collapsed': props.collapsed }">
+  <div class="fixed left-0 top-0 h-screen bg-gradient-to-b from-dark-bg to-dark-bg-light border-r border-white/10 flex flex-col transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] z-[1000] shadow-[2px_0_8px_rgba(0,0,0,0.3)]" :class="props.collapsed ? 'w-20' : 'w-60'">
     <!-- Logo区域 -->
-    <div class="sidebar-header">
-      <div class="logo-container">
-        <img src="/favicon.png" alt="Solana Token Manager" class="logo-image" />
+    <div class="h-20 flex items-center justify-start px-3 relative" style="height: 80px;">
+      <div class="flex items-center gap-3">
+        <img src="/favicon.png" alt="Solana Token Manager" class="w-[38px] h-[38px] rounded-full shrink-0" />
         <transition name="fade">
-          <div v-if="!props.collapsed" class="logo-text">
-            <div class="logo-title">Solana Token Manager</div> 
+          <div v-if="!props.collapsed" class="flex flex-col gap-[1px] whitespace-nowrap leading-tight">
+            <div class="text-[15px] font-[680] bg-gradient-solana bg-clip-text text-transparent tracking-[0.3px]">Solana Token Manager</div> 
           </div>
         </transition>
       </div>
+      <div class="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[rgba(20,241,149,0.3)] via-[rgba(153,69,255,0.4)] via-[rgba(20,241,149,0.3)] to-transparent"></div>
     </div>
 
     <!-- 菜单区域 -->
-    <div class="sidebar-menu">
-      <div v-for="item in menuItems" :key="item.key" class="menu-item"
-        :class="{ 'menu-item-active': props.activeKey === item.key }" @click="handleMenuSelect(item.key)">
-        <component :is="item.icon" class="menu-icon" />
+    <div class="flex-1 py-4 px-2 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-sm [&::-webkit-scrollbar-thumb:hover]:bg-white/30">
+      <div v-for="item in menuItems" :key="item.key" 
+        class="flex items-center px-4 py-3 mb-1 rounded-lg cursor-pointer transition-all duration-200 ease-in-out text-white/70 gap-3 hover:bg-[rgba(20,241,149,0.1)] hover:text-solana-green"
+        :class="{ 'bg-gradient-to-r from-[rgba(20,241,149,0.2)] to-[rgba(20,241,149,0.05)] text-solana-green shadow-[0_2px_8px_rgba(20,241,149,0.2)]': props.activeKey === item.key }"
+        @click="handleMenuSelect(item.key)">
+        <component :is="item.icon" class="text-lg shrink-0" />
         <transition name="fade">
-          <span v-if="!props.collapsed" class="menu-label">{{ item.label }}</span>
+          <span v-if="!props.collapsed" class="text-sm whitespace-nowrap">{{ item.label }}</span>
         </transition>
       </div>
     </div>
 
     <!-- 底部折叠按钮 -->
-    <div class="sidebar-footer">
-      <div class="collapse-btn" @click="toggleCollapse">
-        <CloseOutlined v-if="!props.collapsed" class="collapse-icon" />
-        <MenuOutlined v-else class="collapse-icon" />
+    <div class="p-4 border-t border-white/10">
+      <div class="flex items-center justify-center w-full p-2 rounded-lg cursor-pointer transition-all duration-200 ease-in-out text-white/70 hover:bg-white/10 hover:text-solana-green" @click="toggleCollapse">
+        <CloseOutlined v-if="!props.collapsed" class="text-base transition-all duration-300 ease-in-out" />
+        <MenuOutlined v-else class="text-base transition-all duration-300 ease-in-out" />
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.sidebar {
-  position: fixed;
-  left: 0;
-  top: 0;
-  height: 100vh;
-  width: 240px;
-  background: linear-gradient(180deg, #0B132B 0%, #1A2235 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 1000;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
-}
-
-.sidebar-collapsed {
-  width: 80px;
-}
-
-.sidebar-header {
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 0 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  position: relative;
-}
-
-.sidebar-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg,
-      transparent 0%,
-      rgba(20, 241, 149, 0.3) 50%,
-      transparent 100%);
-}
-
-.logo-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.logo-image {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.logo-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  white-space: nowrap;
-  line-height: 1.2;
-}
-
-.logo-title {
-  font-size: 13px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #14F195 0%, #9945FF 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: 0.3px;
-}
-
-.logo-subtitle {
-  font-size: 11px;
-  font-weight: 600;
-  background: linear-gradient(135deg, #14F195 0%, #9945FF 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: 0.2px;
-}
-
-.sidebar-menu {
-  flex: 1;
-  padding: 16px 8px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  margin-bottom: 4px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: rgba(255, 255, 255, 0.7);
-  gap: 12px;
-}
-
-.menu-item:hover {
-  background: rgba(20, 241, 149, 0.1);
-  color: #14F195;
-}
-
-.menu-item-active {
-  background: linear-gradient(90deg, rgba(20, 241, 149, 0.2) 0%, rgba(20, 241, 149, 0.05) 100%);
-  color: #14F195;
-  box-shadow: 0 2px 8px rgba(20, 241, 149, 0.2);
-}
-
-.menu-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.menu-label {
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.collapse-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #14F195;
-}
-
-.collapse-icon {
-  font-size: 16px;
-  transition: all 0.3s ease;
-}
-
 /* 过渡动画 */
 .fade-enter-active,
 .fade-leave-active {
@@ -292,23 +145,5 @@ const toggleCollapse = () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-/* 滚动条样式 */
-.sidebar-menu::-webkit-scrollbar {
-  width: 4px;
-}
-
-.sidebar-menu::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sidebar-menu::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-}
-
-.sidebar-menu::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
 }
 </style>

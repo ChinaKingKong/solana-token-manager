@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
+import { ReloadOutlined } from '@ant-design/icons-vue';
 import { PublicKey } from '@solana/web3.js';
 import { useWallet } from '../../composables/useWallet';
 
@@ -19,19 +20,67 @@ interface TokenData {
 }
 
 // 使用钱包Hook
-const {
-  walletState,
-  connection,
-  fetchBalance,
-} = useWallet();
+const walletContext = useWallet() as any;
+const walletState = walletContext.walletState;
+// connection 在 useWallet 中是一个 ref，需要访问 .value
+const connection = computed(() => {
+  const conn = walletContext.connection;
+  console.log('walletContext.connection:', conn);
+  // connection 可能是 ref，也可能是直接的 Connection 对象
+  if (conn && typeof conn === 'object' && 'value' in conn) {
+    console.log('connection 是 ref，访问 .value');
+    return conn.value;
+  }
+  console.log('connection 是直接对象');
+  return conn;
+});
+const fetchBalance = walletContext.fetchBalance;
 
 // 代币列表
 const tokens = ref<TokenData[]>([]);
 const loading = ref(false);
 
+// 分页相关
+const currentPage = ref(1);
+const pageSize = ref(6); // 每页显示6个代币（2行x3列，或3行x2列）
+
+// 计算分页后的代币列表
+const paginatedTokens = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  return tokens.value.slice(start, end);
+});
+
+// 处理分页变化
+const handlePageChange = (page: number) => {
+  currentPage.value = page;
+  // 滚动到列表顶部
+  const listContainer = document.querySelector('.tokens-list-container');
+  if (listContainer) {
+    listContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
+// 监听代币列表变化，重置到第一页
+watch(() => tokens.value.length, () => {
+  currentPage.value = 1;
+});
+
+// SOL余额
+const walletBalance = computed(() => {
+  return walletState.value?.balance ?? 0;
+});
+
+// 调试信息
+const debugInfo = ref({
+  lastFetchTime: null as Date | null,
+  errorCount: 0,
+  lastError: null as string | null,
+});
+
 // 刷新余额
 const refreshBalance = async () => {
-  if (!walletState.value.connected) {
+  if (!walletState.value || !walletState.value.connected) {
     message.error('请先连接钱包');
     return;
   }
@@ -48,58 +97,240 @@ const refreshBalance = async () => {
 
 // 获取代币列表
 const fetchTokenList = async () => {
+  if (!walletState.value) {
+    console.warn('❌ 钱包状态未初始化');
+    return;
+  }
+
+  console.log('检查钱包状态:', {
+    connected: walletState.value.connected,
+    hasPublicKey: !!walletState.value.publicKey,
+    publicKey: walletState.value.publicKey?.toString()
+  });
+
+  if (!walletState.value.connected) {
+    console.warn('❌ 钱包未连接');
+    return;
+  }
+
   if (!walletState.value.publicKey) {
+    console.warn('❌ 公钥为空');
+    message.error('钱包公钥无效，请重新连接钱包');
     return;
   }
 
   loading.value = true;
 
+  // 定义直接 RPC 调用方法
+  const fetchTokenAccountsDirectRPC = async () => {
+    console.log('🔄 使用直接 RPC 调用方法');
+    const publicKey = walletState.value.publicKey!;
+
+    // Solana RPC getTokenAccountsByOwner 的正确参数格式：
+    // 1. owner (公钥字符串)
+    // 2. filter 对象: { mint: ... } 或 { programId: ... }
+    // 3. config 对象: { encoding: ... }
+    const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+    
+    const conn = connection.value;
+    const response = await fetch(conn.rpcEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getTokenAccountsByOwner',
+        params: [
+          publicKey.toBase58(),
+          {
+            programId: TOKEN_PROGRAM_ID
+          },
+          {
+            encoding: 'jsonParsed'
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    console.log('✅ RPC 响应:', data);
+
+    if (data.error) {
+      console.error('RPC 错误详情:', data.error);
+      throw new Error(data.error.message);
+    }
+
+    return data.result;
+  };
+
   try {
-    // 获取钱包的所有代币账户
-    const tokenAccounts = await connection.value.getParsedTokenAccountsByOwner(
-      walletState.value.publicKey,
-      { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
-    );
+    console.log('🔄 开始获取代币列表...');
+    console.log('钱包公钥:', walletState.value.publicKey.toString());
+    const conn = connection.value;
+    console.log('Connection对象:', conn);
+    console.log('Connection类型:', conn?.constructor?.name);
+    console.log('RPC端点:', conn?.rpcEndpoint);
+
+    if (!conn) {
+      throw new Error('Connection对象未初始化');
+    }
+
+    // 确保 PublicKey 对象有效
+    const publicKey = walletState.value.publicKey;
+    console.log('PublicKey 类型:', publicKey.constructor.name);
+    console.log('PublicKey 实例:', publicKey);
+
+    // 尝试使用 getAccountInfo 先测试 RPC 连接
+    console.log('测试 RPC 连接...');
+    const accountInfo = await conn.getAccountInfo(publicKey);
+    console.log('✅ RPC 连接正常，账户信息:', accountInfo);
+
+    let tokenAccountsResponse;
+
+    // 尝试使用 getTokenAccountsByOwner 方法
+    // 如果失败则使用直接的 RPC 调用
+    try {
+      console.log('调用 getTokenAccountsByOwner...');
+      if (!publicKey) {
+        throw new Error('PublicKey 对象无效');
+      }
+      tokenAccountsResponse = await conn.getTokenAccountsByOwner(
+        publicKey,
+        {
+          programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+        },
+        {
+          encoding: 'jsonParsed'
+        }
+      );
+      console.log('✅ getTokenAccountsByOwner 成功');
+    } catch (error1: any) {
+      console.warn('⚠️ getTokenAccountsByOwner 失败:', error1.message);
+      console.log('🔄 切换到直接 RPC 调用...');
+      tokenAccountsResponse = await fetchTokenAccountsDirectRPC();
+    }
+
+    console.log('✅ 获取到的代币账户响应:', tokenAccountsResponse);
+    console.log('响应结构:', {
+      hasContext: !!tokenAccountsResponse.context,
+      hasValue: !!tokenAccountsResponse.value,
+      valueLength: tokenAccountsResponse.value?.length
+    });
 
     const tokenList: TokenData[] = [];
 
-    for (const account of tokenAccounts.value) {
-      const parsedData = account.account.data.parsed;
-      const tokenAmount = parsedData.info.tokenAmount;
+    // getTokenAccountsByOwner 返回 { context, value } 结构
+    const accounts = tokenAccountsResponse.value || [];
+    console.log('处理的代币账户数组:', accounts);
 
-      // 只显示余额大于0的代币
-      if (tokenAmount.amount !== '0') {
+    for (const account of accounts) {
+      try {
+        // 安全检查
+        if (!account || !account.account || !account.account.data) {
+          console.warn('⚠️ 账户数据不完整，跳过:', account);
+          continue;
+        }
+
+        const accountData = account.account.data;
+        
+        // 检查 parsed 数据
+        if (!accountData.parsed || !accountData.parsed.info) {
+          console.warn('⚠️ 账户解析数据不完整，跳过:', account);
+          continue;
+        }
+
+        const parsedData = accountData.parsed;
+        const tokenAmount = parsedData.info.tokenAmount;
+
+        // 检查 pubkey
+        if (!account.pubkey) {
+          console.warn('⚠️ 账户公钥不存在，跳过:', account);
+          continue;
+        }
+
+        const pubkeyString = account.pubkey.toString ? account.pubkey.toString() : String(account.pubkey);
+
+        console.log(`📊 代币信息:`, {
+          mint: parsedData.info.mint,
+          ata: pubkeyString,
+          余额: tokenAmount.uiAmountString,
+          decimals: tokenAmount.decimals
+        });
+
+        // 显示所有代币，包括余额为0的
         tokenList.push({
           mint: parsedData.info.mint,
-          ata: account.pubkey.toString(),
+          ata: pubkeyString,
           balance: parseFloat(tokenAmount.uiAmount || '0'),
           decimals: tokenAmount.decimals,
         });
+      } catch (error) {
+        console.error('❌ 处理代币账户时出错:', error, account);
       }
     }
 
     tokens.value = tokenList;
+    console.log('✅ 处理后的代币列表:', tokenList);
 
     // 获取代币元数据
     await fetchTokenMetadata();
 
-  } catch (error) {
-    message.error('获取代币列表失败');
-    console.error(error);
+  } catch (error: any) {
+    console.error('❌ 获取代币列表失败:', error);
+    console.error('错误堆栈:', error.stack);
+
+    message.error(`获取代币列表失败: ${error.message || '未知错误'}`);
+
+    // 更新调试信息
+    debugInfo.value.errorCount++;
+    debugInfo.value.lastError = error.message || '未知错误';
+    debugInfo.value.lastFetchTime = new Date();
+
+    // 显示详细的错误信息
+    if (error.message) {
+      console.error('错误详情:', error.message);
+    }
+
+    // 检查是否是网络问题
+    if (error.message?.includes('fetch') || error.message?.includes('network')) {
+      message.warning('网络连接问题，请检查网络连接');
+    }
+
+    // 检查是否是RPC问题
+    if (error.message?.includes('timeout') || error.message?.includes('RPC')) {
+      message.warning('RPC节点响应超时，请稍后重试');
+    }
   } finally {
     loading.value = false;
+    debugInfo.value.lastFetchTime = new Date();
   }
 };
 
 // 获取代币元数据
 const fetchTokenMetadata = async () => {
   try {
-    const response = await fetch('https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json');
+    console.log('开始获取代币元数据...');
+
+    const response = await fetch('https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
     const tokenList = await response.json();
+    console.log('获取到的代币元数据数量:', tokenList.tokens.length);
 
     tokens.value = tokens.value.map(token => {
       const metadata = tokenList.tokens.find((t: any) => t.address === token.mint);
       if (metadata) {
+        console.log(`找到代币元数据: ${token.mint} -> ${metadata.symbol}`);
         return {
           ...token,
           symbol: metadata.symbol,
@@ -107,10 +338,15 @@ const fetchTokenMetadata = async () => {
           logoURI: metadata.logoURI,
         };
       }
+      console.log(`未找到代币元数据: ${token.mint}`);
       return token;
     });
-  } catch (error) {
+
+    console.log('元数据匹配完成');
+  } catch (error: any) {
     console.error('获取代币元数据失败:', error);
+    // 元数据获取失败不影响显示，只是没有图标和名称
+    message.warning('获取代币元数据失败，将显示默认信息');
   }
 };
 
@@ -127,14 +363,22 @@ const formatAddress = (address: string) => {
 };
 
 // 复制地址
-const copyAddress = (address: string) => {
+const copyAddress = (address: string, type: string = '地址') => {
   navigator.clipboard.writeText(address)
     .then(() => {
-      message.success('已复制到剪贴板');
+      message.success(`${type}已复制到剪贴板`);
     })
     .catch(() => {
       message.error('复制失败');
     });
+};
+
+// 转账功能
+const handleTransfer = (token: TokenData) => {
+  // 触发转账事件，传递代币信息
+  console.log('转账:', token);
+  message.info(`转账功能开发中，代币: ${token.symbol || 'Unknown'}`);
+  // TODO: 导航到转账页面并传递代币信息
 };
 
 // 在Solscan查看
@@ -144,13 +388,13 @@ const viewOnSolscan = (mint: string) => {
 
 // 组件挂载时加载数据
 onMounted(() => {
-  if (walletState.value.connected) {
+  if (walletState.value && walletState.value.connected) {
     fetchTokenList();
   }
 });
 
 // 监听钱包连接状态变化
-watch(() => walletState.value.connected, (isConnected) => {
+watch(() => walletState.value?.connected, (isConnected) => {
   if (isConnected) {
     fetchTokenList();
   }
@@ -163,20 +407,18 @@ defineOptions({
 </script>
 
 <template>
-  <div class="token-list-page">
+  <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] h-full flex flex-col">
     <!-- 页面标题区域 -->
-    <div class="page-header-section">
-      <div class="header-content">
-        <div class="title-section">
-          <h1 class="page-title">
-            <span class="title-icon">💎</span>
-            我的代币
-          </h1>
-          <p class="page-subtitle">管理和查看您的所有代币资产</p>
-        </div>
-        <div class="header-actions">
-          <a-button type="primary" :loading="loading" @click="refreshBalance" size="large">
-            <template #icon>🔄</template>
+    <div class="mb-6 shrink-0">
+      <div class="flex justify-end items-center gap-4">
+        <div class="shrink-0">
+          <a-button 
+            :loading="loading" 
+            @click="refreshBalance" 
+            size="large"
+            class="bg-white/10 border border-white/20 text-white h-10 px-5 text-sm font-medium rounded-[10px] transition-all duration-300 ease-in-out hover:bg-[rgba(20,241,149,0.15)] hover:border-[rgba(20,241,149,0.4)] hover:text-solana-green hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(20,241,149,0.2)] active:translate-y-0"
+          >
+            <template #icon><ReloadOutlined /></template>
             刷新余额
           </a-button>
         </div>
@@ -184,48 +426,48 @@ defineOptions({
     </div>
 
     <!-- 资产概览卡片 -->
-    <div class="overview-section">
-      <div class="overview-cards">
-        <div class="overview-card sol-card">
-          <div class="card-bg-effect"></div>
-          <div class="card-content">
-            <div class="card-icon">
-              <span class="sol-symbol">◎</span>
+    <div class="mb-6 shrink-0">
+      <div class="flex flex-row gap-6 flex-nowrap w-full">
+        <div class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(20,241,149,0.3)] rounded-2xl p-7 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(20,241,149,0.5)]">
+          <div class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
+          <div class="relative flex items-center gap-5 z-[1]">
+            <div class="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-4xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
+              <span class="sol-symbol text-[42px] text-solana-green">◎</span>
             </div>
-            <div class="card-info">
-              <div class="card-label">SOL 余额</div>
-              <div class="card-value">{{ walletBalance.toFixed(4) }}</div>
-              <div class="card-unit">SOL</div>
+            <div class="flex-1 min-w-0 overflow-hidden">
+              <div class="text-[13px] text-white/60 mb-2 font-medium">SOL 余额</div>
+              <div class="text-2xl font-bold text-white leading-tight mb-1.5 break-words max-w-full" style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">{{ walletBalance.toFixed(4) }}</div>
+              <div class="text-sm text-white/50 font-medium">SOL</div>
             </div>
           </div>
           <div class="card-glow"></div>
         </div>
 
-        <div class="overview-card tokens-card">
-          <div class="card-bg-effect"></div>
-          <div class="card-content">
-            <div class="card-icon">
+        <div class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(153,69,255,0.3)] rounded-2xl p-7 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(153,69,255,0.5)]">
+          <div class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
+          <div class="relative flex items-center gap-5 z-[1]">
+            <div class="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-4xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
               <span>🪙</span>
             </div>
-            <div class="card-info">
-              <div class="card-label">代币种类</div>
-              <div class="card-value">{{ tokens.length }}</div>
-              <div class="card-unit">种</div>
+            <div class="flex-1 min-w-0 overflow-hidden">
+              <div class="text-[13px] text-white/60 mb-2 font-medium">代币种类</div>
+              <div class="text-2xl font-bold text-white leading-tight mb-1.5 break-words max-w-full" style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">{{ tokens.length }}</div>
+              <div class="text-sm text-white/50 font-medium">种</div>
             </div>
           </div>
           <div class="card-glow"></div>
         </div>
 
-        <div class="overview-card value-card">
-          <div class="card-bg-effect"></div>
-          <div class="card-content">
-            <div class="card-icon">
+        <div class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(82,196,26,0.3)] rounded-2xl p-7 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(82,196,26,0.5)]">
+          <div class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
+          <div class="relative flex items-center gap-5 z-[1]">
+            <div class="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-4xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
               <span>💰</span>
             </div>
-            <div class="card-info">
-              <div class="card-label">总估值</div>
-              <div class="card-value">${{ totalValue.toFixed(2) }}</div>
-              <div class="card-unit">USD</div>
+            <div class="flex-1 min-w-0 overflow-hidden">
+              <div class="text-[13px] text-white/60 mb-2 font-medium">总估值</div>
+              <div class="text-2xl font-bold text-white leading-tight mb-1.5 break-words max-w-full" style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">${{ totalValue.toFixed(2) }}</div>
+              <div class="text-sm text-white/50 font-medium">USD</div>
             </div>
           </div>
           <div class="card-glow"></div>
@@ -234,122 +476,181 @@ defineOptions({
     </div>
 
     <!-- 未连接钱包提示 -->
-    <div v-if="!walletState.value.connected" class="empty-container">
-      <div class="empty-state">
-        <div class="empty-animation">
-          <div class="floating-icon">🔗</div>
+    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px]">
+      <div class="text-center">
+        <div class="mb-6 animate-bounce">
+          <div class="text-6xl">🔗</div>
         </div>
-        <h3 class="empty-title">请先连接钱包</h3>
-        <p class="empty-description">连接钱包后即可查看和管理您的代币资产</p>
+        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
+        <p class="text-white/60">连接钱包后即可查看和管理您的代币资产</p>
       </div>
     </div>
 
     <!-- 空状态 -->
-    <div v-else-if="tokens.length === 0 && !loading" class="empty-container">
-      <div class="empty-state">
-        <div class="empty-animation">
-          <div class="floating-icon">🪙</div>
-        </div>
-        <h3 class="empty-title">暂无代币</h3>
-        <p class="empty-description">您还没有任何代币，可以去创建新代币</p>
+    <div v-else-if="tokens.length === 0 && !loading" class="flex items-center justify-center min-h-[400px]">
+      <a-empty
+        description="暂无代币"
+      >
+        <template #description>
+          <span class="text-white/65">您还没有任何代币，可以去创建新代币</span>
+        </template>
         <a-button type="primary" size="large" @click="$emit('navigate-to', 'create-token')">
           <template #icon>➕</template>
           创建代币
         </a-button>
-      </div>
+      </a-empty>
     </div>
 
     <!-- 加载状态 -->
-    <div v-else-if="loading" class="loading-container">
+    <div v-else-if="loading" class="flex flex-col items-center justify-center min-h-[400px] gap-4">
       <a-spin size="large" />
-      <p class="loading-text">正在加载代币数据...</p>
+      <p class="text-white/80">正在加载代币数据...</p>
     </div>
 
     <!-- 代币列表 -->
-    <div v-else class="tokens-section">
-      <div class="section-header">
-        <h2 class="section-title">代币列表</h2>
-        <div class="section-info">
-          <span class="token-count">共 {{ tokens.length }} 个代币</span>
+    <div v-else class="flex-1 flex flex-col min-h-0 overflow-hidden h-full animate-[fadeInUp_0.4s_ease-out]">
+      <div class="flex justify-between items-center mb-4 px-5 py-4 bg-[rgba(26,34,53,0.6)] rounded-2xl border border-white/10 backdrop-blur-[10px]">
+        <h2 class="m-0 text-xl font-semibold text-white">代币列表</h2>
+        <div class="flex items-center gap-2">
+          <span class="px-3 py-1.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] rounded-full border border-[rgba(20,241,149,0.2)]">共 {{ tokens.length }} 个代币</span>
         </div>
       </div>
 
-      <div class="tokens-list">
-        <div
-          v-for="token in tokens"
-          :key="token.mint"
-          class="token-item"
-        >
+      <!-- 调试信息面板 -->
+      <div v-if="debugInfo.lastError" class="mb-6 p-4 bg-[rgba(255,193,7,0.1)] border border-[rgba(255,193,7,0.3)] rounded-lg">
+        <div class="flex justify-between items-center mb-3">
+          <span class="text-base font-semibold text-[#ffc107]">⚠️ 调试信息</span>
+          <a-button size="small" @click="debugInfo.lastError = null">关闭</a-button>
+        </div>
+        <div class="space-y-2">
+          <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
+            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">错误信息:</span>
+            <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.lastError }}</span>
+          </div>
+          <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
+            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">错误次数:</span>
+            <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.errorCount }}</span>
+          </div>
+          <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
+            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">最后尝试:</span>
+            <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.lastFetchTime?.toLocaleString() }}</span>
+          </div>
+          <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
+            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">钱包公钥:</span>
+            <span class="text-[13px] text-white font-mono break-all">{{ walletState.publicKey?.toString() }}</span>
+          </div>
+          <div class="mt-2">
+            <p class="m-0 mb-2 text-sm text-[#ffc107]"><strong>可能的问题:</strong></p>
+            <ul class="m-0 pl-5">
+              <li class="text-[13px] text-white/80 mb-1">钱包中可能没有任何SPL Token</li>
+              <li class="text-[13px] text-white/80 mb-1">RPC节点连接问题（Devnet可能不稳定）</li>
+              <li class="text-[13px] text-white/80 mb-1">网络延迟或超时</li>
+              <li class="text-[13px] text-white/80 mb-1">尝试先创建一个代币，然后再查看列表</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 min-h-0 overflow-y-auto mb-4 pr-2">
+        <div class="grid grid-cols-2 gap-6">
+          <div
+            v-for="token in paginatedTokens"
+            :key="token.mint"
+            class="bg-gradient-to-br from-[rgba(26,34,53,0.8)] to-[rgba(11,19,43,0.8)] border border-white/10 rounded-2xl p-5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] relative overflow-hidden w-full box-border flex flex-col gap-4 hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]"
+          >
           <!-- 代币Logo和信息 -->
-          <div class="token-main">
-            <div class="token-logo-wrapper">
+          <div class="flex items-start gap-4">
+            <div class="w-14 h-14 shrink-0 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center border border-white/10">
               <img
                 v-if="token.logoURI"
                 :src="token.logoURI"
                 :alt="token.symbol || 'Token'"
-                class="token-logo"
+                class="w-full h-full object-cover"
                 @error="(e: any) => e.target.style.display = 'none'"
               />
-              <div v-else class="token-logo-placeholder">
+              <div v-else class="w-full h-full flex items-center justify-center bg-gradient-solana text-white font-bold text-lg">
                 {{ token.symbol?.slice(0, 2) || 'TK' }}
               </div>
             </div>
 
-            <div class="token-info">
-              <div class="token-name-group">
-                <h3 class="token-name">{{ token.name || 'Unknown Token' }}</h3>
-                <a-tag class="token-symbol-tag">{{ token.symbol || 'UNKNOWN' }}</a-tag>
+            <div class="flex-1 min-w-0 overflow-hidden">
+              <div class="flex items-center gap-2 mb-2">
+                <h3 class="m-0 text-lg font-semibold text-white truncate">{{ token.name || 'Unknown Token' }}</h3>
+                <a-tag class="px-2 py-0.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] border border-[rgba(20,241,149,0.2)] rounded-full">{{ token.symbol || 'UNKNOWN' }}</a-tag>
               </div>
-              <div class="token-address" @click="copyAddress(token.mint)">
-                <code>{{ formatAddress(token.mint) }}</code>
-                <span class="copy-icon">📋</span>
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-white/60 font-medium min-w-[40px]">Mint</span>
+                  <div class="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0" @click="copyAddress(token.mint, 'Mint地址')">
+                    <code class="text-xs text-white/80 font-mono truncate flex-1">{{ formatAddress(token.mint) }}</code>
+                    <span class="text-xs shrink-0">📋</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-white/60 font-medium min-w-[40px]">ATA</span>
+                  <div class="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0" @click="copyAddress(token.ata, 'ATA地址')">
+                    <code class="text-xs text-white/80 font-mono truncate flex-1">{{ formatAddress(token.ata) }}</code>
+                    <span class="text-xs shrink-0">📋</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- 代币余额 -->
-          <div class="token-balance-section">
-            <div class="balance-label">持有数量</div>
-            <div class="balance-value">
+          <div class="px-4 py-3 bg-white/5 rounded-xl border border-white/10">
+            <div class="text-xs text-white/60 mb-1 font-medium">持有数量</div>
+            <div class="text-xl font-bold text-white mb-1 break-words">
               {{ token.balance.toFixed(token.decimals) }}
             </div>
-            <div class="balance-symbol">{{ token.symbol || 'Tokens' }}</div>
+            <div class="text-sm text-white/80 font-medium">{{ token.symbol || 'Tokens' }}</div>
           </div>
 
           <!-- 代币操作 -->
-          <div class="token-actions-section">
+          <div class="mt-auto">
             <a-space direction="vertical" :size="8" style="width: 100%">
-              <a-button type="primary" block size="large" class="action-btn transfer-btn">
+              <a-button
+                type="primary"
+                block
+                size="large"
+                @click="handleTransfer(token)"
+              >
                 <template #icon>📤</template>
                 转账
               </a-button>
-              <a-button block size="large" class="action-btn detail-btn" @click="viewOnSolscan(token.mint)">
+              <a-button
+                block
+                size="large"
+                class="bg-white/10 border border-white/20 text-white hover:bg-white/15 hover:border-white/30"
+                @click="viewOnSolscan(token.mint)"
+              >
                 <template #icon>🔍</template>
                 在 Solscan 查看
               </a-button>
             </a-space>
           </div>
-
-          <!-- ATA地址 -->
-          <div class="token-ata-section">
-            <div class="ata-label">ATA 地址</div>
-            <div class="ata-value" @click="copyAddress(token.ata)">
-              <code>{{ formatAddress(token.ata) }}</code>
-              <span class="copy-icon">📋</span>
-            </div>
           </div>
         </div>
+      </div>
+
+      <!-- 分页组件 -->
+      <div v-if="tokens.length > pageSize" class="mt-4 flex justify-center">
+        <a-pagination
+          v-model:current="currentPage"
+          :total="tokens.length"
+          :page-size="pageSize"
+          :show-size-changer="false"
+          :show-quick-jumper="true"
+          :show-total="(total: number, range: [number, number]) => `共 ${total} 个代币，第 ${range[0]}-${range[1]} 个`"
+          @change="handlePageChange"
+          class="[&_.ant-pagination-item]:bg-white/10 [&_.ant-pagination-item]:border-white/20 [&_.ant-pagination-item]:text-white [&_.ant-pagination-item:hover]:border-solana-green [&_.ant-pagination-item-active]:bg-solana-green [&_.ant-pagination-item-active]:border-solana-green [&_.ant-pagination-prev]:text-white [&_.ant-pagination-next]:text-white [&_.ant-pagination-jump-prev]:text-white [&_.ant-pagination-jump-next]:text-white"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.token-list-page {
-  padding: 0;
-  animation: fadeIn 0.3s ease-in;
-}
-
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -361,76 +662,21 @@ defineOptions({
   }
 }
 
-/* 页面标题区域 */
-.page-header-section {
-  margin-bottom: 32px;
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-}
-
-.title-section {
-  flex: 1;
-}
-
-.page-title {
-  margin: 0 0 8px 0;
-  font-size: 32px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #14F195 0%, #9945FF 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.title-icon {
-  font-size: 36px;
-  filter: drop-shadow(0 0 10px rgba(20, 241, 149, 0.5));
-}
-
-.page-subtitle {
-  margin: 0;
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.header-actions {
-  flex-shrink: 0;
-}
-
-/* 资产概览卡片 */
-.overview-section {
-  margin-bottom: 40px;
-}
-
-.overview-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-}
-
+/* 资产概览卡片特殊效果 */
 .overview-card {
   position: relative;
-  background: linear-gradient(135deg, rgba(26, 34, 53, 0.9) 0%, rgba(11, 19, 43, 0.9) 100%);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 28px;
   overflow: hidden;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(20px);
-}
-
-.overview-card:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-  border-color: rgba(20, 241, 149, 0.5);
 }
 
 .overview-card::before {
@@ -447,70 +693,6 @@ defineOptions({
 
 .overview-card:hover::before {
   opacity: 1;
-}
-
-.card-bg-effect {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
-  pointer-events: none;
-}
-
-.card-content {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  z-index: 1;
-}
-
-.card-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
-  backdrop-filter: blur(10px);
-  flex-shrink: 0;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-}
-
-.sol-symbol {
-  font-size: 42px;
-  color: #14F195;
-  filter: drop-shadow(0 0 10px rgba(20, 241, 149, 0.6));
-}
-
-.card-info {
-  flex: 1;
-}
-
-.card-label {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-
-.card-value {
-  font-size: 36px;
-  font-weight: 700;
-  color: #ffffff;
-  line-height: 1;
-  margin-bottom: 6px;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-
-.card-unit {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 500;
 }
 
 .card-glow {
@@ -530,420 +712,52 @@ defineOptions({
   opacity: 1;
 }
 
-.sol-card {
-  border-color: rgba(20, 241, 149, 0.3);
+.sol-symbol {
+  filter: drop-shadow(0 0 10px rgba(20, 241, 149, 0.6));
 }
 
-.tokens-card {
-  border-color: rgba(153, 69, 255, 0.3);
+/* Empty 组件样式 */
+:deep(.ant-empty) {
+  color: rgba(255, 255, 255, 0.65);
 }
 
-.value-card {
-  border-color: rgba(82, 196, 26, 0.3);
+:deep(.ant-empty-description) {
+  color: rgba(255, 255, 255, 0.65);
 }
 
-/* 空状态 */
-.empty-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 400px;
-  padding: 60px 20px;
+:deep(.ant-empty-image) {
+  opacity: 0.6;
 }
 
-.empty-state {
-  text-align: center;
+/* 自定义滚动条样式 */
+.tokens-list-container::-webkit-scrollbar {
+  width: 6px;
 }
 
-.empty-animation {
-  margin-bottom: 24px;
+.tokens-list-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
 }
 
-.floating-icon {
-  display: inline-block;
-  font-size: 80px;
-  animation: float 3s ease-in-out infinite;
+.tokens-list-container::-webkit-scrollbar-thumb {
+  background: rgba(20, 241, 149, 0.3);
+  border-radius: 3px;
 }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
-}
-
-.empty-title {
-  margin: 0 0 16px 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.empty-description {
-  margin: 0 0 32px 0;
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.6);
-  line-height: 1.6;
-}
-
-/* 加载状态 */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  gap: 20px;
-}
-
-.loading-text {
-  margin: 0;
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* 代币列表部分 */
-.tokens-section {
-  animation: fadeInUp 0.4s ease-out;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  padding: 20px 24px;
-  background: rgba(26, 34, 53, 0.6);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-}
-
-.section-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.section-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.token-count {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
-  padding: 6px 12px;
-  background: rgba(20, 241, 149, 0.1);
-  border-radius: 20px;
-  border: 1px solid rgba(20, 241, 149, 0.3);
-}
-
-/* 代币列表 */
-.tokens-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.token-item {
-  background: linear-gradient(135deg, rgba(26, 34, 53, 0.7) 0%, rgba(11, 19, 43, 0.7) 100%);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 24px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(20px);
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 24px;
-  align-items: start;
-}
-
-.token-item:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
-  border-color: rgba(20, 241, 149, 0.4);
-}
-
-.token-main {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  min-width: 0;
-}
-
-.token-logo-wrapper {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: linear-gradient(135deg, rgba(20, 241, 149, 0.2) 0%, rgba(153, 69, 255, 0.2) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.token-logo {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.token-logo-placeholder {
-  font-size: 24px;
-  font-weight: 700;
-  color: #ffffff;
-  text-transform: uppercase;
-}
-
-.token-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.token-name-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.token-name {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffffff;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.token-symbol-tag {
-  background: rgba(20, 241, 149, 0.15);
-  border: 1px solid rgba(20, 241, 149, 0.4);
-  color: #14F195;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.token-address {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.token-address:hover {
-  background: rgba(20, 241, 149, 0.1);
-  transform: scale(1.02);
-}
-
-.token-address code {
-  font-family: monospace;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.copy-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-/* 余额区域 */
-.token-balance-section {
-  text-align: right;
-  min-width: 120px;
-}
-
-.balance-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-
-.balance-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #14F195;
-  line-height: 1;
-  margin-bottom: 6px;
-  text-shadow: 0 0 20px rgba(20, 241, 149, 0.4);
-}
-
-.balance-symbol {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 500;
-}
-
-/* 操作按钮区域 */
-.token-actions-section {
-  min-width: 160px;
-}
-
-.action-btn {
-  height: 44px;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 12px;
-  transition: all 0.3s ease;
-}
-
-.transfer-btn {
-  background: linear-gradient(135deg, #14F195 0%, #9945FF 100%);
-  border: none;
-  color: #0B132B;
-}
-
-.transfer-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(20, 241, 149, 0.4);
-}
-
-.detail-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-}
-
-.detail-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
-  transform: translateY(-2px);
-}
-
-/* ATA地址区域 */
-.token-ata-section {
-  grid-column: 1 / -1;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.ata-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-.ata-value {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  transition: all 0.2s ease;
-}
-
-.ata-value:hover {
-  background: rgba(153, 69, 255, 0.1);
-  transform: scale(1.02);
-}
-
-.ata-value code {
-  font-family: monospace;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+.tokens-list-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 241, 149, 0.5);
 }
 
 /* 响应式设计 */
 @media (max-width: 1024px) {
-  .token-item {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-
-  .token-balance-section {
-    text-align: left;
-  }
-
-  .token-actions-section {
-    min-width: auto;
-  }
-
-  .token-ata-section {
-    grid-column: auto;
+  .tokens-list-container {
+    max-height: calc(100vh - 480px);
   }
 }
 
 @media (max-width: 768px) {
-  .page-title {
-    font-size: 24px;
-  }
-
-  .title-icon {
-    font-size: 28px;
-  }
-
-  .header-content {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .header-actions {
-    width: 100%;
-  }
-
-  .header-actions :deep(.ant-btn) {
-    width: 100%;
-  }
-
   .overview-cards {
-    grid-template-columns: 1fr;
-  }
-
-  .card-value {
-    font-size: 28px;
-  }
-
-  .token-item {
-    padding: 20px;
-  }
-
-  .token-main {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .token-name-group {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
   }
 }
 </style>
