@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { message } from "ant-design-vue";
-import { useWallet } from '../composables/useWallet';
+import { useWallet } from '../hooks/useWallet';
 import { CopyOutlined, DisconnectOutlined, WalletOutlined, DownOutlined } from '@ant-design/icons-vue';
 
 // 使用钱包Hook

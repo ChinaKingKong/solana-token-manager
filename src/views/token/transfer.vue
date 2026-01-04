@@ -1,11 +1,30 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { message } from 'ant-design-vue';
-import { PublicKey } from '@solana/web3.js';
-import { getOrCreateAssociatedTokenAccount, getAccount, transfer } from '@solana/spl-token';
-import { getCurrentWallet, walletPublicKey, connected, walletBalance } from '../../utils/wallet';
-import { connection } from '../../utils/wallet';
-import { getMint } from '@solana/spl-token';
+import { PublicKey, Transaction } from '@solana/web3.js';
+import {
+  getOrCreateAssociatedTokenAccount,
+  getAccount,
+  getMint,
+  getAssociatedTokenAddress,
+  createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
+} from '@solana/spl-token';
+import {
+  SendOutlined,
+  CopyOutlined,
+  InfoCircleOutlined,
+  WalletOutlined,
+  ReloadOutlined,
+  GlobalOutlined,
+} from '@ant-design/icons-vue';
+import { useWallet } from '../../hooks/useWallet';
+
+// 使用钱包Hook
+const walletContext = useWallet();
+const walletState = walletContext.walletState;
+const connection = computed(() => walletContext.connection.value);
+const network = walletContext.network;
 
 // 代币Mint地址
 const tokenMintAddress = ref('');
@@ -14,22 +33,19 @@ const transferAmount = ref('');
 
 // 状态
 const transferring = ref(false);
+const loadingInfo = ref(false);
 const loadingBalance = ref(false);
 const decimals = ref(9);
 const senderBalance = ref(0);
-const tokenInfo = ref<any>(null);
+const tokenInfo = ref<{
+  decimals: number;
+  supply: string;
+  mintAuthority: string | null;
+  freezeAuthority: string | null;
+} | null>(null);
 const senderATA = ref('');
 
-// 验证函数
-const isFormValid = computed(() => {
-  return tokenMintAddress.value &&
-         recipientAddress.value &&
-         transferAmount.value &&
-         parseFloat(transferAmount.value) > 0 &&
-         walletPublicKey.value !== null;
-});
-
-// 验证Solana地址
+// 验证Solana地址格式
 const isValidSolanaAddress = (address: string): boolean => {
   try {
     new PublicKey(address);
@@ -39,58 +55,86 @@ const isValidSolanaAddress = (address: string): boolean => {
   }
 };
 
+// 验证函数
+const isFormValid = computed(() => {
+  const hasMintAddress = tokenMintAddress.value.trim() !== '';
+  const hasRecipient = recipientAddress.value.trim() !== '' && isValidSolanaAddress(recipientAddress.value);
+  const hasAmount = transferAmount.value && parseFloat(transferAmount.value) > 0;
+  const isConnected = walletState.value?.connected && walletState.value?.publicKey !== null;
+  const hasEnoughBalance = parseFloat(transferAmount.value || '0') <= senderBalance.value;
+  
+  return hasMintAddress && hasRecipient && hasAmount && isConnected && hasEnoughBalance;
+});
+
+// 格式化地址
+const formatAddress = (address: string) => {
+  if (!address) return '';
+  return `${address.slice(0, 6)}...${address.slice(-6)}`;
+};
+
 // 获取代币信息
 const fetchTokenInfo = async () => {
-  if (!tokenMintAddress.value) {
+  if (!tokenMintAddress.value.trim()) {
     return;
   }
 
+  if (!walletState.value?.connected) {
+    return;
+  }
+
+  loadingInfo.value = true;
   try {
     const mintPubkey = new PublicKey(tokenMintAddress.value);
-    const mintInfo = await getMint(connection, mintPubkey);
+    const mintInfo = await getMint(connection.value, mintPubkey);
 
     tokenInfo.value = {
       decimals: mintInfo.decimals,
       supply: mintInfo.supply.toString(),
-      mintAuthority: mintInfo.mintAuthority?.toString() || 'None',
-      freezeAuthority: mintInfo.freezeAuthority?.toString() || 'None'
+      mintAuthority: mintInfo.mintAuthority?.toString() || null,
+      freezeAuthority: mintInfo.freezeAuthority?.toString() || null,
     };
 
     decimals.value = mintInfo.decimals;
     await fetchSenderBalance();
-  } catch (error) {
-    message.error('获取代币信息失败,请检查Mint地址');
-    console.error(error);
+  } catch (error: any) {
+    message.error(`获取代币信息失败: ${error.message || '请检查Mint地址'}`);
+    tokenInfo.value = null;
+  } finally {
+    loadingInfo.value = false;
   }
 };
 
 // 获取发送者余额
 const fetchSenderBalance = async () => {
-  if (!tokenMintAddress.value || !walletPublicKey.value) {
+  if (!tokenMintAddress.value || !walletState.value?.publicKey) {
     return;
   }
 
   loadingBalance.value = true;
   try {
     const mintPubkey = new PublicKey(tokenMintAddress.value);
-    const ownerPubkey = walletPublicKey.value;
+    const ownerPubkey = walletState.value.publicKey;
 
-    // 获取关联代币账户
-    const tokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      getCurrentWallet()!,
+    // 获取关联代币账户地址
+    const associatedTokenAddress = await getAssociatedTokenAddress(
       mintPubkey,
       ownerPubkey
     );
 
-    senderATA.value = tokenAccount.address.toString();
+    senderATA.value = associatedTokenAddress.toString();
 
     // 获取账户余额
-    const accountInfo = await getAccount(connection, tokenAccount.address);
-    senderBalance.value = Number(accountInfo.amount) / Math.pow(10, decimals.value);
-  } catch (error) {
-    message.error('获取余额失败');
-    console.error(error);
+    try {
+      const accountInfo = await getAccount(connection.value, associatedTokenAddress);
+      senderBalance.value = Number(accountInfo.amount) / Math.pow(10, decimals.value);
+    } catch (error: any) {
+      // 账户不存在
+      senderBalance.value = 0;
+      senderATA.value = '';
+    }
+  } catch (error: any) {
+    message.error(`获取余额失败: ${error.message || '未知错误'}`);
+    senderBalance.value = 0;
   } finally {
     loadingBalance.value = false;
   }
@@ -103,8 +147,13 @@ const handleTransfer = async () => {
     return;
   }
 
-  if (!connected.value) {
+  if (!walletState.value?.connected || !walletState.value?.publicKey) {
     message.error('请先连接钱包');
+    return;
+  }
+
+  if (!walletState.value?.wallet) {
+    message.error('钱包未连接');
     return;
   }
 
@@ -120,59 +169,120 @@ const handleTransfer = async () => {
     return;
   }
 
-  const wallet = getCurrentWallet();
-  if (!wallet || !walletPublicKey.value) {
-    message.error('请先连接钱包');
-    return;
-  }
-
   transferring.value = true;
 
   try {
+    // 再次检查钱包状态（防止在操作过程中断开连接）
+    if (!walletState.value?.connected || !walletState.value?.publicKey) {
+      message.error('钱包未连接，请重新连接钱包');
+      return;
+    }
+
+    if (!walletState.value?.wallet) {
+      message.error('钱包适配器未初始化，请重新连接钱包');
+      return;
+    }
+
     const mintPubkey = new PublicKey(tokenMintAddress.value);
     const recipientPubkey = new PublicKey(recipientAddress.value);
-    const ownerPubkey = walletPublicKey.value;
+    const senderPubkey = walletState.value.publicKey!;
+    const wallet = walletState.value.wallet;
+    const conn = connection.value;
 
-    // 获取发送者的关联代币账户
-    const senderTokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      wallet,
+    // 验证钱包适配器是否有效
+    if (!wallet || typeof wallet.sendTransaction !== 'function') {
+      message.error('钱包适配器无效，请重新连接钱包');
+      return;
+    }
+
+    // 检查钱包适配器的连接状态
+    if (wallet.connected === false || !wallet.publicKey) {
+      message.error('钱包未连接，请重新连接钱包');
+      return;
+    }
+
+    // 获取发送者的关联代币账户地址
+    const senderATAAddress = await getAssociatedTokenAddress(
       mintPubkey,
-      ownerPubkey
+      senderPubkey
     );
 
-    // 获取或创建接收者的关联代币账户
-    const recipientTokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      wallet,
+    // 获取接收者的关联代币账户地址
+    const recipientATAAddress = await getAssociatedTokenAddress(
       mintPubkey,
       recipientPubkey
     );
 
+    // 检查接收者账户是否存在
+    let recipientAccountExists = false;
+    try {
+      await getAccount(conn, recipientATAAddress);
+      recipientAccountExists = true;
+    } catch (error: any) {
+      recipientAccountExists = false;
+    }
+
+    // 创建交易
+    const transaction = new Transaction();
+
+    // 如果接收者账户不存在，添加创建账户的指令
+    if (!recipientAccountExists) {
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          senderPubkey, // payer (发送者支付创建账户的费用)
+          recipientATAAddress, // ata
+          recipientPubkey, // owner (接收者)
+          mintPubkey // mint
+        )
+      );
+    }
+
     // 计算转账数量(考虑小数位)
     const amountToTransfer = Math.floor(parseFloat(transferAmount.value) * Math.pow(10, decimals.value));
 
-    // 执行转账
-    await transfer(
-      connection,
-      wallet,
-      senderTokenAccount.address,
-      recipientTokenAccount.address,
-      ownerPubkey,
-      amountToTransfer
+    // 添加转账指令
+    transaction.add(
+      createTransferCheckedInstruction(
+        senderATAAddress, // source
+        mintPubkey, // mint
+        recipientATAAddress, // destination
+        senderPubkey, // owner (发送者)
+        amountToTransfer,
+        decimals.value
+      )
     );
 
-    message.success(`成功转账 ${transferAmount.value} 代币到 ${recipientAddress.value.slice(0, 8)}...`);
+    // 获取最近的区块哈希
+    const { blockhash } = await conn.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = senderPubkey;
 
-    // 刷新余额
+    // 发送并确认交易
+    const signature = await wallet.sendTransaction(transaction, conn);
+    await conn.confirmTransaction(signature, 'confirmed');
+
+    message.success(`成功转账 ${transferAmount.value} 代币到 ${formatAddress(recipientAddress.value)}!`);
+
+    // 刷新余额和代币信息
     await fetchSenderBalance();
+    await fetchTokenInfo();
 
     // 清空表单
     transferAmount.value = '';
     recipientAddress.value = '';
-  } catch (error) {
-    message.error('转账失败');
-    console.error(error);
+  } catch (error: any) {
+    console.error('转账失败:', error);
+    
+    // 改进错误提示
+    if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
+      message.warning('您已取消交易');
+    } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
+      message.error('钱包未连接，请重新连接钱包后重试');
+    } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
+      message.error('余额不足，无法完成转账');
+    } else {
+      message.error(`转账失败: ${error.message || '未知错误'}`);
+    }
   } finally {
     transferring.value = false;
   }
@@ -180,272 +290,321 @@ const handleTransfer = async () => {
 
 // 设置最大转账金额
 const setMaxAmount = () => {
-  transferAmount.value = senderBalance.value.toString();
-};
-
-// 监听Mint地址变化
-const onMintAddressChange = () => {
-  if (tokenMintAddress.value) {
-    fetchTokenInfo();
+  if (senderBalance.value > 0) {
+    transferAmount.value = senderBalance.value.toString();
   }
 };
 
+// 复制地址
+const copyAddress = (address: string) => {
+  navigator.clipboard.writeText(address)
+    .then(() => {
+      message.success('地址已复制到剪贴板');
+    })
+    .catch(() => {
+      message.error('复制失败');
+    });
+};
+
+// 在Solscan查看
+const viewOnSolscan = (mint: string) => {
+  const cluster = network.value === 'mainnet' ? '' : `?cluster=${network.value}`;
+  window.open(`https://solscan.io/token/${mint}${cluster}`, '_blank');
+};
+
+// 监听Mint地址变化
+watch(() => tokenMintAddress.value, (newValue) => {
+  if (newValue && newValue.trim()) {
+    fetchTokenInfo();
+  } else {
+    tokenInfo.value = null;
+    senderBalance.value = 0;
+    senderATA.value = '';
+  }
+});
+
+// 监听钱包连接状态
+watch(() => walletState.value?.connected, (isConnected) => {
+  if (isConnected && tokenMintAddress.value) {
+    fetchSenderBalance();
+  } else {
+    senderBalance.value = 0;
+    senderATA.value = '';
+  }
+});
+
 // 默认导出
 defineOptions({
-  name: 'TransferToken'
+  name: 'TransferToken',
 });
 </script>
 
 <template>
-  <div class="transfer-token-container">
-    <h2>转账代币</h2>
-
-    <div class="info-section">
-      <a-alert
-        type="info"
-        show-icon
-        message="转账说明"
-        description="转账前请确保接收地址正确,转账到错误地址可能导致资金无法找回。建议先转账小额测试。"
-      />
+  <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] min-h-full flex flex-col">
+    <!-- 未连接钱包提示 -->
+    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px] flex-1">
+      <div class="text-center">
+        <div class="mb-6 animate-bounce">
+          <WalletOutlined class="text-6xl text-white/30" />
+        </div>
+        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
+        <p class="text-white/60">连接钱包后即可转账代币</p>
+      </div>
     </div>
 
-    <!-- SOL余额卡片 -->
-    <a-card class="sol-balance-card" title="SOL余额">
-      <div class="balance-info">
-        <div class="balance-label">当前余额:</div>
-        <div class="balance-value">{{ walletBalance }} SOL</div>
-      </div>
-    </a-card>
-
-    <a-form layout="vertical" class="transfer-form">
-      <a-form-item label="代币Mint地址">
-        <a-input
-          v-model:value="tokenMintAddress"
-          placeholder="请输入代币的Mint地址"
-          @change="onMintAddressChange"
-        />
-        <div class="form-hint">输入要转账的代币的Mint地址</div>
-      </a-form-item>
-
-      <!-- 代币信息显示 -->
-      <div v-if="tokenInfo" class="token-info-card">
-        <h3>代币信息</h3>
-        <a-descriptions bordered :column="1">
-          <a-descriptions-item label="小数位数">
-            {{ tokenInfo.decimals }}
-          </a-descriptions-item>
-          <a-descriptions-item label="当前供应量">
-            {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toFixed(tokenInfo.decimals) }}
-          </a-descriptions-item>
-        </a-descriptions>
-      </div>
-
-      <!-- 发送者余额 -->
-      <div v-if="tokenInfo" class="balance-card">
-        <a-card>
-          <template #title>
-            <span>您的余额</span>
-          </template>
-          <template #extra>
-            <a-button
-              type="link"
-              :loading="loadingBalance"
-              @click="fetchSenderBalance"
-            >
-              刷新
-            </a-button>
-          </template>
-          <div class="balance-amount">
-            {{ senderBalance.toFixed(decimals) }}
+    <!-- 转账表单 -->
+    <div v-else class="w-full py-3">
+      <div
+        class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border border-white/10 rounded-2xl p-6 overflow-visible transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]">
+        <div
+          class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none">
+        </div>
+        <div class="relative z-[1] space-y-6">
+          <!-- Mint 地址 -->
+          <div>
+            <label class="block text-sm font-medium text-white/90 mb-2">
+              Mint 地址 <span class="text-red-400">*</span>
+            </label>
+            <a-input
+              v-model:value="tokenMintAddress"
+              placeholder="请输入代币的Mint地址"
+              size="large"
+              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
+              :class="{ '!border-solana-green': tokenMintAddress }"
+            />
+            <div class="mt-1.5 text-xs text-white/50">输入要转账的代币的Mint地址</div>
           </div>
-          <div class="ata-address" v-if="senderATA">
-            <small>ATA: {{ senderATA.slice(0, 8) }}...{{ senderATA.slice(-8) }}</small>
+
+          <!-- 代币信息显示 -->
+          <div v-if="tokenInfo" class="space-y-4">
+            <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="m-0 text-base font-semibold text-white">代币信息</h3>
+                <div class="flex items-center gap-2">
+                  <a-button
+                    @click="viewOnSolscan(tokenMintAddress)"
+                    size="small"
+                    class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                    <template #icon>
+                      <GlobalOutlined />
+                    </template>
+                    Solscan
+                  </a-button>
+                  <a-button
+                    @click="fetchTokenInfo"
+                    :loading="loadingInfo"
+                    size="small"
+                    class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                    <template #icon>
+                      <ReloadOutlined />
+                    </template>
+                    刷新
+                  </a-button>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                  <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">当前供应量</div>
+                  <div class="text-sm font-semibold text-white truncate">
+                    {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toLocaleString() }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 发送者余额 -->
+            <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-white/80">您的余额</span>
+                <a-button
+                  @click="fetchSenderBalance"
+                  :loading="loadingBalance"
+                  size="small"
+                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                  <template #icon>
+                    <ReloadOutlined />
+                  </template>
+                  刷新
+                </a-button>
+              </div>
+              <div class="text-2xl font-bold text-solana-green mb-2">
+                {{ senderBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
+              </div>
+              <div v-if="senderATA" class="flex items-center gap-2">
+                <span class="text-xs text-white/50">ATA:</span>
+                <code class="text-xs text-white/70 font-mono">{{ formatAddress(senderATA) }}</code>
+                <a-button
+                  @click="copyAddress(senderATA)"
+                  type="text"
+                  size="small"
+                  class="p-0 h-auto text-white/50 hover:text-white">
+                  <template #icon>
+                    <CopyOutlined />
+                  </template>
+                </a-button>
+              </div>
+            </div>
           </div>
-        </a-card>
-      </div>
 
-      <a-form-item label="接收地址">
-        <a-input
-          v-model:value="recipientAddress"
-          placeholder="请输入接收者的钱包地址"
-        />
-        <div class="form-hint">接收代币的钱包地址(Solana地址)</div>
-      </a-form-item>
+          <!-- 接收地址 -->
+          <div>
+            <label class="block text-sm font-medium text-white/90 mb-2">
+              接收地址 <span class="text-red-400">*</span>
+            </label>
+            <a-input
+              v-model:value="recipientAddress"
+              placeholder="请输入接收者的钱包地址"
+              size="large"
+              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
+              :class="{
+                '!border-solana-green': recipientAddress && isValidSolanaAddress(recipientAddress),
+                '!border-red-500': recipientAddress && !isValidSolanaAddress(recipientAddress)
+              }"
+            />
+            <div class="mt-1.5 text-xs text-white/50">接收代币的钱包地址(Solana地址)</div>
+            <div v-if="recipientAddress && !isValidSolanaAddress(recipientAddress)" class="mt-1.5 text-xs text-red-400">
+              地址格式不正确
+            </div>
+          </div>
 
-      <a-form-item label="转账数量">
-        <a-input
-          v-model:value="transferAmount"
-          type="number"
-          :min="0"
-          :step="Math.pow(10, -decimals)"
-          placeholder="请输入转账数量"
-        >
-          <template #suffix>
+          <!-- 转账数量 -->
+          <div>
+            <label class="block text-sm font-medium text-white/90 mb-2">
+              转账数量 <span class="text-red-400">*</span>
+            </label>
+            <div class="flex items-center gap-2">
+              <a-input-number
+                v-model:value="transferAmount"
+                :min="0"
+                :max="senderBalance"
+                :precision="decimals"
+                :step="Math.pow(10, -decimals)"
+                size="large"
+                class="flex-1 bg-white/5 border-white/20 text-white rounded-xl"
+                :class="{ '!border-solana-green': transferAmount }"
+                placeholder="请输入转账数量"
+              />
+              <a-button
+                @click="setMaxAmount"
+                :disabled="!senderATA || senderBalance === 0"
+                class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2 h-auto text-sm font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30 disabled:opacity-50 !text-white">
+                MAX
+              </a-button>
+            </div>
+            <div class="mt-1.5 text-xs text-white/50">
+              最多支持 {{ decimals }} 位小数，当前余额: {{ senderBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
+            </div>
+            <div v-if="transferAmount && parseFloat(transferAmount) > senderBalance" class="mt-1.5 text-xs text-red-400">
+              转账金额不能超过当前余额
+            </div>
+          </div>
+
+          <!-- 提示信息 -->
+          <div
+            class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
+            <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
+            <div class="flex-1">
+              <div class="text-sm font-medium text-solana-green mb-1">转账提示</div>
+              <div class="text-xs text-white/70">
+                <ul class="m-0 pl-4 space-y-1">
+                  <li>转账前请确保接收地址正确，转账到错误地址可能导致资金无法找回</li>
+                  <li>如果接收者账户不存在，系统会自动创建（需要支付账户创建费用）</li>
+                  <li>请确保您有足够的 SOL 支付交易手续费和账户创建费用</li>
+                  <li>建议先转账小额测试</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- 转账按钮 -->
+          <div class="pt-2">
             <a-button
-              type="link"
-              size="small"
-              @click="setMaxAmount"
-              :disabled="!senderATA"
-            >
-              MAX
+              type="primary"
+              :loading="transferring"
+              :disabled="!isFormValid"
+              @click="handleTransfer"
+              size="large"
+              block
+              class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
+              <template #icon>
+                <SendOutlined />
+              </template>
+              {{ transferring ? '转账中...' : '转账代币' }}
             </a-button>
-          </template>
-        </a-input>
-        <div class="form-hint">最多支持 {{ decimals }} 位小数,当前余额: {{ senderBalance.toFixed(decimals) }}</div>
-      </a-form-item>
-
-      <a-form-item>
-        <a-space>
-          <a-button
-            type="primary"
-            :loading="transferring"
-            :disabled="!isFormValid"
-            @click="handleTransfer"
-          >
-            <template #icon>
-              <SendOutlined />
-            </template>
-            转账
-          </a-button>
-          <a-button @click="fetchSenderBalance" :disabled="!tokenMintAddress">
-            刷新余额
-          </a-button>
-        </a-space>
-      </a-form-item>
-    </a-form>
-
-    <!-- 操作说明 -->
-    <div class="instructions">
-      <h3>操作步骤</h3>
-      <ol>
-        <li>输入要转账的代币的Mint地址</li>
-        <li>查看您的当前余额</li>
-        <li>输入接收者的钱包地址</li>
-        <li>输入转账数量(可点击MAX使用全部余额)</li>
-        <li>点击"转账"按钮完成转账</li>
-      </ol>
-    </div>
-
-    <!-- 费用说明 -->
-    <div class="fee-info">
-      <a-alert
-        type="warning"
-        show-icon
-        message="费用说明"
-        description="转账需要支付交易费用(gas fee),费用约为0.000005 SOL,请确保钱包中有足够的SOL余额。"
-      />
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
-<script lang="ts">
-import { SendOutlined } from '@ant-design/icons-vue';
-export default {
-  components: {
-    SendOutlined
-  }
-};
-</script>
-
 <style scoped>
-.transfer-token-container {
-  padding: 20px;
-  background: #fff;
-  border-radius: 4px;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.info-section {
-  margin-bottom: 20px;
+/* 输入框样式覆盖 */
+:deep(.ant-input),
+:deep(.ant-input-number-input) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
-.sol-balance-card {
-  margin-bottom: 20px;
+:deep(.ant-input:focus),
+:deep(.ant-input-focused),
+:deep(.ant-input-number-focused .ant-input-number-input) {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: #14f195 !important;
+  box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;
 }
 
-.balance-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+:deep(.ant-input::placeholder) {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
-.balance-label {
-  font-size: 14px;
-  color: rgba(0, 0, 0, 0.65);
+:deep(.ant-input-number-handler-wrap) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-.balance-value {
-  font-size: 20px;
-  font-weight: bold;
-  color: #1890ff;
+:deep(.ant-input-number-handler) {
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
-.transfer-form {
-  margin-top: 20px;
+:deep(.ant-input-number-handler:hover) {
+  color: rgba(255, 255, 255, 1) !important;
 }
 
-.form-hint {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  margin-top: 4px;
+/* 按钮样式覆盖 */
+:deep(.ant-btn-primary:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
-.token-info-card {
-  margin: 20px 0;
-  padding: 15px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
+/* MAX 按钮文字颜色 */
+:deep(.ant-btn:not(.ant-btn-primary)) {
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
-.token-info-card h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
+:deep(.ant-btn:not(.ant-btn-primary):hover) {
+  color: rgba(255, 255, 255, 1) !important;
 }
 
-.balance-card {
-  margin: 20px 0;
-}
-
-.balance-amount {
-  font-size: 24px;
-  font-weight: bold;
-  color: #1890ff;
-  text-align: center;
-  padding: 10px 0;
-}
-
-.ata-address {
-  margin-top: 10px;
-  text-align: center;
-  color: rgba(0, 0, 0, 0.45);
-}
-
-.instructions {
-  margin-top: 30px;
-  padding: 20px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
-}
-
-.instructions h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.instructions ol {
-  padding-left: 20px;
-  margin: 0;
-}
-
-.instructions li {
-  margin-bottom: 8px;
-  line-height: 1.6;
-}
-
-.fee-info {
-  margin-top: 20px;
+:deep(.ant-btn:not(.ant-btn-primary):disabled) {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 </style>

@@ -11,7 +11,6 @@ const TokenMint = defineAsyncComponent(() => import("./views/token/mint.vue"));
 const TokenTransfer = defineAsyncComponent(() => import("./views/token/transfer.vue"));
 const TokenBurn = defineAsyncComponent(() => import("./views/token/burn.vue"));
 const TokenFreeze = defineAsyncComponent(() => import("./views/token/freeze.vue"));
-const CreateAccount = defineAsyncComponent(() => import("./views/token/create-account.vue"));
 const IPFSUploader = defineAsyncComponent(() => import("./views/ipfs/index.vue"));
 const SetMetadata = defineAsyncComponent(() => import("./views/metadata/index.vue"));
 const TransactionHistory = defineAsyncComponent(() => import("./views/history/index.vue"));
@@ -46,6 +45,13 @@ onMounted(() => {
   if (savedState !== null) {
     sidebarCollapsed.value = savedState === "true";
   }
+  
+  // 监听导航事件
+  window.addEventListener('navigate-to', ((e: CustomEvent) => {
+    if (e.detail?.key) {
+      handleMenuSelect(e.detail.key);
+    }
+  }) as EventListener);
 });
 </script>
 
@@ -73,7 +79,6 @@ onMounted(() => {
         <component :is="TokenTransfer" v-else-if="activeKey === 'transfer-token'" />
         <component :is="TokenBurn" v-else-if="activeKey === 'burn-token'" />
         <component :is="TokenFreeze" v-else-if="activeKey === 'freeze-manage'" />
-        <component :is="CreateAccount" v-else-if="activeKey === 'create-associated'" />
         <component :is="IPFSUploader" v-else-if="activeKey === 'ipfs-upload'" />
         <component :is="SetMetadata" v-else-if="activeKey === 'set-metadata'" />
         <component :is="TransactionHistory" v-else-if="activeKey === 'transaction-history'" />

@@ -3,7 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined } from '@ant-design/icons-vue';
 import { PublicKey } from '@solana/web3.js';
-import { useWallet } from '../../composables/useWallet';
+import { useWallet } from '../../hooks/useWallet';
 
 // 代币数据接口
 interface TokenData {
@@ -383,7 +383,7 @@ defineOptions({
   <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] h-full flex flex-col">
     <!-- 资产概览卡片 -->
     <div class="shrink-0 mt-3">
-      <div class="flex flex-row gap-6 flex-nowrap w-full">
+      <div class="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full">
         <div
           class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(20,241,149,0.3)] rounded-2xl p-4 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(20,241,149,0.5)]">
           <div
@@ -453,7 +453,7 @@ defineOptions({
     <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px]">
       <div class="text-center">
         <div class="mb-6 animate-bounce">
-          <div class="text-6xl">🔗</div>
+          <WalletOutlined class="text-6xl text-white/30" />
         </div>
         <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
         <p class="text-white/60">连接钱包后即可查看和管理您的代币资产</p>
@@ -483,9 +483,9 @@ defineOptions({
     <div v-else class="flex-1 flex flex-col min-h-0 overflow-hidden h-full animate-[fadeInUp_0.4s_ease-out] mt-5">
       <!-- 标题区域 -->
       <div
-        class="flex justify-between items-center mb-6 px-6 py-4 bg-[rgba(26,34,53,0.6)] rounded-2xl border border-white/10 backdrop-blur-[10px]">
-        <h2 class="m-0 text-xl font-semibold text-white">代币列表</h2>
-        <div class="flex items-center gap-3">
+        class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 px-4 sm:px-6 py-4 bg-[rgba(26,34,53,0.6)] rounded-2xl border border-white/10 backdrop-blur-[10px]">
+        <h2 class="m-0 text-lg sm:text-xl font-semibold text-white">代币列表</h2>
+        <div class="flex items-center gap-3 flex-wrap">
           <span
             class="px-3 py-1.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] rounded-full border border-[rgba(20,241,149,0.2)]">共
             {{ tokens.length }} 个代币</span>
@@ -537,7 +537,7 @@ defineOptions({
       </div>
 
       <div class="flex-1 min-h-0 overflow-y-auto pr-2 px-2">
-        <div class="grid grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <div v-for="token in paginatedTokens" :key="token.mint"
             class="token-card bg-gradient-to-br from-[rgba(26,34,53,0.8)] to-[rgba(11,19,43,0.8)] border border-white/10 rounded-xl p-4 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] relative overflow-hidden w-full box-border flex flex-col gap-3 hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]">
             <!-- 代币Logo和信息 -->
@@ -735,6 +735,23 @@ defineOptions({
 @media (max-width: 768px) {
   .overview-cards {
     flex-direction: column;
+  }
+  
+  /* 移动端代币卡片调整 */
+  .token-card {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 小屏幕代币卡片内容调整 */
+  .token-card .flex.items-start {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .token-card .flex.items-start > div:first-child {
+    margin-bottom: 8px;
   }
 }
 </style>

@@ -234,6 +234,8 @@ export function useWalletProvider() {
     walletState,
     supportedWallets,
     connection,
+    network,
+    switchNetwork,
   };
 }
 

@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { useWalletProvider } from '../composables/useWallet';
+import { useWalletProvider } from '../hooks/useWallet';
 
 // 初始化钱包提供者
 const { walletState } = useWalletProvider();

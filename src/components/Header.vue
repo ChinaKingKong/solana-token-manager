@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { message } from 'ant-design-vue';
 import Wallet from './wallet.vue';
-import { useWallet } from '../composables/useWallet';
+import { useWallet } from '../hooks/useWallet';
 import type { NetworkType } from '../config/rpc';
 import {
   HomeOutlined,
@@ -10,7 +10,6 @@ import {
   SendOutlined,
   FireOutlined,
   LockOutlined,
-  LinkOutlined,
   UploadOutlined,
   FileTextOutlined,
   HistoryOutlined,
@@ -39,7 +38,6 @@ const pageConfigs: PageConfig[] = [
   { key: 'transfer-token', title: '转账代币', icon: SendOutlined },
   { key: 'burn-token', title: '销毁代币', icon: FireOutlined },
   { key: 'freeze-manage', title: '冻结管理', icon: LockOutlined },
-  { key: 'create-associated', title: '创建关联账户', icon: LinkOutlined },
   { key: 'ipfs-upload', title: 'IPFS上传', icon: UploadOutlined },
   { key: 'set-metadata', title: '设置Metadata', icon: FileTextOutlined },
   { key: 'transaction-history', title: '交易历史', icon: HistoryOutlined },

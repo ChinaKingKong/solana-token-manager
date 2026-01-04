@@ -11,7 +11,6 @@ import {
   CloseOutlined,
   MenuOutlined,
   ToolOutlined,
-  LinkOutlined,
 } from '@ant-design/icons-vue';
 
 // 定义菜单项
@@ -51,11 +50,6 @@ const menuItems: MenuItem[] = [
     key: 'freeze-manage',
     label: '冻结管理',
     icon: LockOutlined,
-  },
-  {
-    key: 'create-associated',
-    label: '创建关联账户',
-    icon: LinkOutlined,
   },
   {
     key: 'ipfs-upload',
