@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
-import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined } from '@ant-design/icons-vue';
+import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined, PlusOutlined } from '@ant-design/icons-vue';
 import { PublicKey } from '@solana/web3.js';
 import { useWallet } from '../../hooks/useWallet';
 
@@ -314,6 +314,13 @@ const totalValue = computed(() => {
   }, 0);
 });
 
+// 处理导航到创建代币页面
+const handleNavigateToCreate = () => {
+  window.dispatchEvent(new CustomEvent('navigate-to', {
+    detail: { key: 'create-token' }
+  }));
+};
+
 // 格式化地址
 const formatAddress = (address: string) => {
   return `${address.slice(0, 6)}...${address.slice(-6)}`;
@@ -462,15 +469,27 @@ defineOptions({
 
     <!-- 空状态 -->
     <div v-else-if="tokens.length === 0 && !loading" class="flex items-center justify-center min-h-[400px]">
-      <a-empty description="暂无代币">
-        <template #description>
-          <span class="text-white/65">您还没有任何代币，可以去创建新代币</span>
-        </template>
-        <a-button type="primary" size="large" @click="$emit('navigate-to', 'create-token')">
-          <template #icon>➕</template>
-          创建代币
-        </a-button>
-      </a-empty>
+      <div class="text-center w-full">
+        <div class="mb-6">
+          <div class="w-24 h-24 mx-auto rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+            <AppstoreOutlined class="text-5xl text-white/30" />
+          </div>
+        </div>
+        <h3 class="text-2xl font-bold text-white mb-2">暂无代币</h3>
+        <p class="text-white/60 mb-6">您还没有任何代币，可以去创建新代币</p>
+        <div class="flex justify-center">
+          <a-button
+            type="primary"
+            size="large"
+            @click="handleNavigateToCreate"
+            class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-8 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300">
+            <template #icon>
+              <PlusOutlined />
+            </template>
+            创建代币
+          </a-button>
+        </div>
+      </div>
     </div>
 
     <!-- 加载状态 -->
@@ -693,18 +712,7 @@ defineOptions({
 }
 
 
-/* Empty 组件样式 */
-:deep(.ant-empty) {
-  color: rgba(255, 255, 255, 0.65);
-}
-
-:deep(.ant-empty-description) {
-  color: rgba(255, 255, 255, 0.65);
-}
-
-:deep(.ant-empty-image) {
-  opacity: 0.6;
-}
+/* 空状态样式已通过自定义组件实现，不再需要 Empty 组件样式 */
 
 /* 自定义滚动条样式 */
 .tokens-list-container::-webkit-scrollbar {
