@@ -1,11 +1,30 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { message } from 'ant-design-vue';
-import { PublicKey } from '@solana/web3.js';
-import { getOrCreateAssociatedTokenAccount, getAccount, burn } from '@solana/spl-token';
-import { getCurrentWallet, walletPublicKey, connected } from '../../utils/wallet';
-import { connection } from '../../utils/wallet';
-import { getMint } from '@solana/spl-token';
+import { ref, computed, watch } from 'vue';
+import { message, Modal } from 'ant-design-vue';
+import { PublicKey, Transaction } from '@solana/web3.js';
+import {
+  getMint,
+  getAssociatedTokenAddress,
+  getAccount,
+  createBurnCheckedInstruction,
+} from '@solana/spl-token';
+import {
+  FireOutlined,
+  CopyOutlined,
+  InfoCircleOutlined,
+  WalletOutlined,
+  ReloadOutlined,
+  CheckCircleOutlined,
+  GlobalOutlined,
+  ExclamationCircleOutlined,
+} from '@ant-design/icons-vue';
+import { useWallet } from '../../hooks/useWallet';
+
+// 使用钱包Hook
+const walletContext = useWallet();
+const walletState = walletContext.walletState;
+const connection = computed(() => walletContext.connection.value);
+const network = walletContext.network;
 
 // 代币Mint地址
 const tokenMintAddress = ref('');
@@ -13,74 +32,103 @@ const burnAmount = ref('');
 
 // 状态
 const burning = ref(false);
+const loadingInfo = ref(false);
 const loadingBalance = ref(false);
 const decimals = ref(9);
 const currentBalance = ref(0);
-const tokenInfo = ref<any>(null);
+const tokenInfo = ref<{
+  decimals: number;
+  supply: string;
+  mintAuthority: string | null;
+  freezeAuthority: string | null;
+} | null>(null);
 const ownerATA = ref('');
+const burnSuccess = ref(false);
+const burnTransactionSignature = ref('');
 
 // 验证函数
 const isFormValid = computed(() => {
-  return tokenMintAddress.value &&
-         burnAmount.value &&
-         parseFloat(burnAmount.value) > 0 &&
-         parseFloat(burnAmount.value) <= currentBalance.value &&
-         walletPublicKey.value !== null;
+  const hasMintAddress = tokenMintAddress.value.trim() !== '';
+  const hasAmount = burnAmount.value && parseFloat(burnAmount.value) > 0;
+  const isConnected = walletState.value?.connected && walletState.value?.publicKey !== null;
+  const hasEnoughBalance = parseFloat(burnAmount.value || '0') <= currentBalance.value;
+  
+  return hasMintAddress && hasAmount && isConnected && hasEnoughBalance;
 });
+
+// 格式化地址
+const formatAddress = (address: string) => {
+  if (!address) return '';
+  return `${address.slice(0, 6)}...${address.slice(-6)}`;
+};
 
 // 获取代币信息
 const fetchTokenInfo = async () => {
-  if (!tokenMintAddress.value) {
+  if (!tokenMintAddress.value.trim()) {
     return;
   }
 
+  if (!walletState.value?.connected) {
+    return;
+  }
+
+  loadingInfo.value = true;
   try {
     const mintPubkey = new PublicKey(tokenMintAddress.value);
-    const mintInfo = await getMint(connection, mintPubkey);
+    const mintInfo = await getMint(connection.value, mintPubkey);
 
     tokenInfo.value = {
       decimals: mintInfo.decimals,
       supply: mintInfo.supply.toString(),
-      mintAuthority: mintInfo.mintAuthority?.toString() || 'None',
-      freezeAuthority: mintInfo.freezeAuthority?.toString() || 'None'
+      mintAuthority: mintInfo.mintAuthority?.toString() || null,
+      freezeAuthority: mintInfo.freezeAuthority?.toString() || null,
     };
 
     decimals.value = mintInfo.decimals;
     await fetchCurrentBalance();
-    message.success('获取代币信息成功');
-  } catch (error) {
-    message.error('获取代币信息失败,请检查Mint地址');
-    console.error(error);
+  } catch (error: any) {
+    message.error(`获取代币信息失败: ${error.message || '请检查Mint地址'}`);
+    console.error('获取代币信息失败:', error);
+    tokenInfo.value = null;
+    currentBalance.value = 0;
+    ownerATA.value = '';
+  } finally {
+    loadingInfo.value = false;
   }
 };
 
 // 获取当前余额
 const fetchCurrentBalance = async () => {
-  if (!tokenMintAddress.value || !walletPublicKey.value) {
+  if (!tokenMintAddress.value.trim() || !walletState.value?.connected || !walletState.value?.publicKey) {
     return;
   }
 
   loadingBalance.value = true;
   try {
     const mintPubkey = new PublicKey(tokenMintAddress.value);
-    const ownerPubkey = walletPublicKey.value;
+    const ownerPubkey = walletState.value.publicKey;
 
-    // 获取或创建关联代币账户
-    const tokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      getCurrentWallet()!,
+    // 获取关联代币账户地址
+    const ataAddress = await getAssociatedTokenAddress(
       mintPubkey,
       ownerPubkey
     );
 
-    ownerATA.value = tokenAccount.address.toString();
+    ownerATA.value = ataAddress.toString();
 
     // 获取账户余额
-    const accountInfo = await getAccount(connection, tokenAccount.address);
-    currentBalance.value = Number(accountInfo.amount) / Math.pow(10, decimals.value);
-  } catch (error) {
-    message.error('获取余额失败');
-    console.error(error);
+    try {
+      const accountInfo = await getAccount(connection.value, ataAddress);
+      currentBalance.value = Number(accountInfo.amount) / Math.pow(10, decimals.value);
+    } catch (error: any) {
+      // 账户不存在
+      currentBalance.value = 0;
+    }
+  } catch (error: any) {
+    message.error(`获取余额失败: ${error.message || '未知错误'}`);
+    console.error('获取余额失败:', error);
+    currentBalance.value = 0;
+    ownerATA.value = '';
   } finally {
     loadingBalance.value = false;
   }
@@ -93,7 +141,7 @@ const handleBurn = async () => {
     return;
   }
 
-  if (!connected.value) {
+  if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
     message.error('请先连接钱包');
     return;
   }
@@ -101,7 +149,7 @@ const handleBurn = async () => {
   // 二次确认
   Modal.confirm({
     title: '确认销毁代币',
-    content: `您确定要销毁 ${burnAmount.value} 个代币吗?此操作不可逆!`,
+    content: `您确定要销毁 ${burnAmount.value} 个代币吗？此操作不可逆！`,
     okText: '确认销毁',
     okType: 'danger',
     cancelText: '取消',
@@ -113,9 +161,8 @@ const handleBurn = async () => {
 
 // 执行销毁操作
 const executeBurn = async () => {
-  const wallet = getCurrentWallet();
-  if (!wallet || !walletPublicKey.value) {
-    message.error('请先连接钱包');
+  if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
+    message.error('钱包未连接，请重新连接钱包');
     return;
   }
 
@@ -123,39 +170,70 @@ const executeBurn = async () => {
 
   try {
     const mintPubkey = new PublicKey(tokenMintAddress.value);
-    const ownerPubkey = walletPublicKey.value;
+    const ownerPubkey = walletState.value.publicKey;
+    const wallet = walletState.value.wallet;
+    const conn = connection.value;
 
-    // 获取关联代币账户
-    const tokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection,
-      wallet,
+    // 获取关联代币账户地址
+    const ataAddress = await getAssociatedTokenAddress(
       mintPubkey,
       ownerPubkey
     );
 
+    // 检查账户是否存在
+    try {
+      await getAccount(conn, ataAddress);
+    } catch (error: any) {
+      message.error('代币账户不存在，无法销毁');
+      return;
+    }
+
     // 计算销毁数量(考虑小数位)
     const amountToBurn = Math.floor(parseFloat(burnAmount.value) * Math.pow(10, decimals.value));
 
-    // 销毁代币
-    await burn(
-      connection,
-      wallet,
-      tokenAccount.address,
-      mintPubkey,
-      wallet,
-      amountToBurn
+    // 创建交易
+    const transaction = new Transaction().add(
+      createBurnCheckedInstruction(
+        ataAddress, // account (代币账户)
+        mintPubkey, // mint (代币mint地址)
+        ownerPubkey, // owner (账户所有者)
+        amountToBurn, // amount (销毁数量)
+        decimals.value // decimals (小数位数)
+      )
     );
 
-    message.success(`成功销毁 ${burnAmount.value} 代币!`);
+    // 获取最近的区块哈希
+    const { blockhash } = await conn.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = ownerPubkey;
 
-    // 刷新余额
+    // 发送并确认交易
+    const signature = await wallet.sendTransaction(transaction, conn);
+    await conn.confirmTransaction(signature, 'confirmed');
+
+    burnTransactionSignature.value = signature;
+    burnSuccess.value = true;
+    message.success(`成功销毁 ${burnAmount.value} 个代币！`);
+
+    // 刷新余额和代币信息
     await fetchCurrentBalance();
+    await fetchTokenInfo();
 
     // 清空表单
     burnAmount.value = '';
-  } catch (error) {
-    message.error('销毁代币失败');
-    console.error(error);
+  } catch (error: any) {
+    console.error('销毁代币失败:', error);
+    
+    // 改进错误提示
+    if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
+      message.warning('您已取消交易');
+    } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
+      message.error('钱包未连接，请重新连接钱包后重试');
+    } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
+      message.error('余额不足，无法完成销毁');
+    } else {
+      message.error(`销毁代币失败: ${error.message || '未知错误'}`);
+    }
   } finally {
     burning.value = false;
   }
@@ -163,288 +241,401 @@ const executeBurn = async () => {
 
 // 设置最大销毁金额
 const setMaxAmount = () => {
-  burnAmount.value = currentBalance.value.toString();
-};
-
-// 监听Mint地址变化
-const onMintAddressChange = () => {
-  if (tokenMintAddress.value) {
-    fetchTokenInfo();
+  if (currentBalance.value > 0) {
+    burnAmount.value = currentBalance.value.toString();
   }
 };
 
+// 复制地址
+const copyAddress = (address: string) => {
+  navigator.clipboard.writeText(address)
+    .then(() => {
+      message.success('地址已复制到剪贴板');
+    })
+    .catch(() => {
+      message.error('复制失败');
+    });
+};
+
+// 在Solscan查看
+const viewOnSolscan = (mint: string) => {
+  const cluster = network.value === 'mainnet' ? '' : `?cluster=${network.value}`;
+  window.open(`https://solscan.io/token/${mint}${cluster}`, '_blank');
+};
+
+// 查看交易
+const viewTransaction = (signature: string) => {
+  const cluster = network.value === 'mainnet' ? '' : `?cluster=${network.value}`;
+  window.open(`https://solscan.io/tx/${signature}${cluster}`, '_blank');
+};
+
+// 重置表单
+const resetForm = () => {
+  burnSuccess.value = false;
+  burnTransactionSignature.value = '';
+  tokenMintAddress.value = '';
+  burnAmount.value = '';
+  tokenInfo.value = null;
+  currentBalance.value = 0;
+  ownerATA.value = '';
+};
+
+// 监听Mint地址变化
+watch(() => tokenMintAddress.value, (newValue) => {
+  if (newValue && newValue.trim()) {
+    fetchTokenInfo();
+  } else {
+    tokenInfo.value = null;
+    currentBalance.value = 0;
+    ownerATA.value = '';
+  }
+});
+
+// 监听钱包连接状态
+watch(() => walletState.value?.connected, (isConnected) => {
+  if (isConnected && tokenMintAddress.value) {
+    fetchCurrentBalance();
+  } else {
+    currentBalance.value = 0;
+    ownerATA.value = '';
+  }
+});
+
 // 默认导出
 defineOptions({
-  name: 'BurnToken'
+  name: 'BurnToken',
 });
 </script>
 
 <template>
-  <div class="burn-token-container">
-    <h2>销毁代币</h2>
-
-    <div class="warning-section">
-      <a-alert
-        type="warning"
-        show-icon
-        message="警告"
-        description="销毁代币是不可逆的操作!一旦销毁,代币将永久从流通中移除,无法恢复。请谨慎操作并确认销毁数量。"
-      />
-    </div>
-
-    <div class="info-section">
-      <a-alert
-        type="info"
-        show-icon
-        message="销毁说明"
-        description="销毁代币会从您的关联代币账户(ATA)中永久移除指定数量的代币。这将减少代币的总供应量。"
-      />
-    </div>
-
-    <a-form layout="vertical" class="burn-form">
-      <a-form-item label="代币Mint地址">
-        <a-input
-          v-model:value="tokenMintAddress"
-          placeholder="请输入代币的Mint地址"
-          @change="onMintAddressChange"
-        />
-        <div class="form-hint">输入要销毁的代币的Mint地址</div>
-      </a-form-item>
-
-      <!-- 代币信息显示 -->
-      <div v-if="tokenInfo" class="token-info-card">
-        <h3>代币信息</h3>
-        <a-descriptions bordered :column="1">
-          <a-descriptions-item label="小数位数">
-            {{ tokenInfo.decimals }}
-          </a-descriptions-item>
-          <a-descriptions-item label="当前总供应量">
-            {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toFixed(tokenInfo.decimals) }}
-          </a-descriptions-item>
-          <a-descriptions-item label="铸币权限">
-            {{ tokenInfo.mintAuthority }}
-          </a-descriptions-item>
-          <a-descriptions-item label="冻结权限">
-            {{ tokenInfo.freezeAuthority }}
-          </a-descriptions-item>
-        </a-descriptions>
-      </div>
-
-      <!-- 当前余额 -->
-      <div v-if="tokenInfo" class="balance-card">
-        <a-card>
-          <template #title>
-            <span>您的余额</span>
-          </template>
-          <template #extra>
-            <a-button
-              type="link"
-              :loading="loadingBalance"
-              @click="fetchCurrentBalance"
-            >
-              刷新
-            </a-button>
-          </template>
-          <div class="balance-amount">
-            {{ currentBalance.toFixed(decimals) }}
-          </div>
-          <div class="ata-address" v-if="ownerATA">
-            <small>ATA: {{ ownerATA.slice(0, 8) }}...{{ ownerATA.slice(-8) }}</small>
-          </div>
-        </a-card>
-      </div>
-
-      <a-form-item label="销毁数量">
-        <a-input
-          v-model:value="burnAmount"
-          type="number"
-          :min="0"
-          :max="currentBalance"
-          :step="Math.pow(10, -decimals)"
-          placeholder="请输入要销毁的数量"
-        >
-          <template #suffix>
-            <a-button
-              type="link"
-              size="small"
-              @click="setMaxAmount"
-              :disabled="!ownerATA"
-            >
-              MAX
-            </a-button>
-          </template>
-        </a-input>
-        <div class="form-hint">
-          最多支持 {{ decimals }} 位小数,当前余额: {{ currentBalance.toFixed(decimals) }}
+  <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] min-h-full flex flex-col">
+    <!-- 未连接钱包提示 -->
+    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px] flex-1">
+      <div class="text-center">
+        <div class="mb-6 animate-bounce">
+          <WalletOutlined class="text-6xl text-white/30" />
         </div>
-      </a-form-item>
-
-      <a-form-item>
-        <a-space>
-          <a-button
-            type="primary"
-            danger
-            :loading="burning"
-            :disabled="!isFormValid"
-            @click="handleBurn"
-          >
-            <template #icon>
-              <FireOutlined />
-            </template>
-            销毁代币
-          </a-button>
-          <a-button @click="fetchCurrentBalance" :disabled="!tokenMintAddress">
-            刷新余额
-          </a-button>
-        </a-space>
-      </a-form-item>
-    </a-form>
-
-    <!-- 操作说明 -->
-    <div class="instructions">
-      <h3>操作步骤</h3>
-      <ol>
-        <li>输入要销毁的代币的Mint地址</li>
-        <li>查看代币信息和您的当前余额</li>
-        <li>输入要销毁的数量(可点击MAX销毁全部)</li>
-        <li>点击"销毁代币"按钮</li>
-        <li>在确认对话框中确认销毁操作</li>
-      </ol>
+        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
+        <p class="text-white/60">连接钱包后即可销毁代币</p>
+      </div>
     </div>
 
-    <!-- 注意事项 -->
-    <div class="notes">
-      <h3>注意事项</h3>
-      <ul>
-        <li>销毁代币将永久减少代币的总供应量</li>
-        <li>销毁操作需要支付交易费用(gas fee)</li>
-        <li>销毁后的代币无法恢复,请谨慎操作</li>
-        <li>确保您的钱包中有足够的SOL支付交易费用</li>
-      </ul>
+    <!-- 成功状态 -->
+    <div v-else-if="burnSuccess" class="flex-1 flex flex-col min-h-0 py-3">
+      <div
+        class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(255,77,79,0.3)] rounded-2xl p-6 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(255,77,79,0.5)] hover:shadow-[0_20px_40px_rgba(255,77,79,0.2)]">
+        <div
+          class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none">
+        </div>
+        <div class="relative z-[1]">
+          <div class="flex items-center gap-3 mb-6">
+            <CheckCircleOutlined class="text-3xl text-[#52c41a]" />
+            <div>
+              <h3 class="m-0 text-xl font-semibold text-white">代币销毁成功！</h3>
+              <p class="m-0 text-sm text-white/60 mt-1">代币已成功销毁，请查看交易详情</p>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <!-- 交易签名 -->
+            <div v-if="burnTransactionSignature" class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-sm font-medium text-white/80">交易签名</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <div
+                  class="flex-1 px-4 py-2.5 bg-white/5 rounded-lg border border-white/10 text-sm font-mono text-white/90 break-all">
+                  {{ burnTransactionSignature }}
+                </div>
+                <a-button @click="copyAddress(burnTransactionSignature)"
+                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                  <template #icon>
+                    <CopyOutlined />
+                  </template>
+                  复制
+                </a-button>
+                <a-button @click="viewTransaction(burnTransactionSignature)"
+                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                  <template #icon>
+                    <GlobalOutlined />
+                  </template>
+                  Solscan
+                </a-button>
+              </div>
+            </div>
+
+            <!-- 代币信息 -->
+            <div v-if="tokenInfo" class="grid grid-cols-2 gap-4">
+              <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+                <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
+              </div>
+              <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+                <div class="text-xs font-medium text-white/60 mb-1">当前余额</div>
+                <div class="text-base font-semibold text-white">
+                  {{ currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
+                </div>
+              </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="flex gap-3 pt-4">
+              <a-button @click="resetForm"
+                class="flex-1 flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-2.5 h-auto text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300">
+                <template #icon>
+                  <FireOutlined />
+                </template>
+                继续销毁
+              </a-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 销毁表单 -->
+    <div v-else class="w-full py-3">
+      <div
+        class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border border-white/10 rounded-2xl p-6 overflow-visible transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(255,77,79,0.3)] hover:shadow-[0_8px_32px_rgba(255,77,79,0.15)]">
+        <div
+          class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none">
+        </div>
+        <div class="relative z-[1] space-y-6">
+          <!-- Mint 地址 -->
+          <div>
+            <label class="block text-sm font-medium text-white/90 mb-2">
+              Mint 地址 <span class="text-red-400">*</span>
+            </label>
+            <a-input
+              v-model:value="tokenMintAddress"
+              placeholder="请输入代币的Mint地址"
+              size="large"
+              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
+              :class="{ '!border-solana-green': tokenMintAddress }"
+            />
+            <div class="mt-1.5 text-xs text-white/50">输入要销毁的代币的Mint地址</div>
+          </div>
+
+          <!-- 代币信息显示 -->
+          <div v-if="tokenInfo" class="space-y-4">
+            <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="m-0 text-base font-semibold text-white">代币信息</h3>
+                <div class="flex items-center gap-2">
+                  <a-button
+                    @click="viewOnSolscan(tokenMintAddress)"
+                    size="small"
+                    class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                    <template #icon>
+                      <GlobalOutlined />
+                    </template>
+                    Solscan
+                  </a-button>
+                  <a-button
+                    @click="fetchTokenInfo"
+                    :loading="loadingInfo"
+                    size="small"
+                    class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                    <template #icon>
+                      <ReloadOutlined />
+                    </template>
+                    刷新
+                  </a-button>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                  <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">当前供应量</div>
+                  <div class="text-sm font-semibold text-white truncate">
+                    {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toLocaleString() }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 当前余额 -->
+            <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-white/80">您的余额</span>
+                <a-button
+                  @click="fetchCurrentBalance"
+                  :loading="loadingBalance"
+                  size="small"
+                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                  <template #icon>
+                    <ReloadOutlined />
+                  </template>
+                  刷新
+                </a-button>
+              </div>
+              <div class="text-2xl font-bold text-red-400 mb-2">
+                {{ currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
+              </div>
+              <div v-if="ownerATA" class="flex items-center gap-2">
+                <span class="text-xs text-white/50">ATA:</span>
+                <code class="text-xs text-white/70 font-mono">{{ formatAddress(ownerATA) }}</code>
+                <a-button
+                  @click="copyAddress(ownerATA)"
+                  type="text"
+                  size="small"
+                  class="p-0 h-auto text-white/50 hover:text-white">
+                  <template #icon>
+                    <CopyOutlined />
+                  </template>
+                </a-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 销毁数量 -->
+          <div>
+            <label class="block text-sm font-medium text-white/90 mb-2">
+              销毁数量 <span class="text-red-400">*</span>
+            </label>
+            <div class="flex items-center gap-2">
+              <a-input-number
+                v-model:value="burnAmount"
+                :min="0"
+                :max="currentBalance"
+                :precision="decimals"
+                :step="Math.pow(10, -decimals)"
+                size="large"
+                class="flex-1 bg-white/5 border-white/20 text-white rounded-xl"
+                :class="{ '!border-solana-green': burnAmount }"
+                placeholder="请输入销毁数量"
+              />
+              <a-button
+                @click="setMaxAmount"
+                :disabled="!ownerATA || currentBalance === 0"
+                class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2 h-auto text-sm font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30 disabled:opacity-50 !text-white">
+                MAX
+              </a-button>
+            </div>
+            <div class="mt-1.5 text-xs text-white/50">
+              最多支持 {{ decimals }} 位小数，当前余额: {{ currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
+            </div>
+            <div v-if="burnAmount && parseFloat(burnAmount) > currentBalance" class="mt-1.5 text-xs text-red-400">
+              销毁数量不能超过当前余额
+            </div>
+          </div>
+
+          <!-- 警告信息 -->
+          <div
+            class="flex items-start gap-3 p-4 bg-[rgba(255,77,79,0.1)] rounded-xl border border-[rgba(255,77,79,0.2)]">
+            <ExclamationCircleOutlined class="text-red-400 text-lg shrink-0 mt-0.5" />
+            <div class="flex-1">
+              <div class="text-sm font-medium text-red-400 mb-1">销毁警告</div>
+              <div class="text-xs text-white/70">
+                <ul class="m-0 pl-4 space-y-1">
+                  <li>销毁代币是不可逆的操作，一旦销毁，代币将永久从流通中移除</li>
+                  <li>销毁操作需要支付交易费用(gas fee)</li>
+                  <li>请确保您的钱包中有足够的 SOL 支付交易费用</li>
+                  <li>建议先销毁小额测试</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- 销毁按钮 -->
+          <div class="pt-2">
+            <a-button
+              type="primary"
+              danger
+              :loading="burning"
+              :disabled="!isFormValid"
+              @click="handleBurn"
+              size="large"
+              block
+              class="flex items-center justify-center bg-gradient-to-r from-red-500 to-red-600 border-none text-white font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(255,77,79,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
+              <template #icon>
+                <FireOutlined />
+              </template>
+              {{ burning ? '销毁中...' : '销毁代币' }}
+            </a-button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
-<script lang="ts">
-import { FireOutlined } from '@ant-design/icons-vue';
-import { Modal } from 'ant-design-vue';
-
-export default {
-  components: {
-    FireOutlined
-  },
-  setup() {
-    return {
-      Modal
-    };
-  }
-};
-</script>
-
 <style scoped>
-.burn-token-container {
-  padding: 20px;
-  background: #fff;
-  border-radius: 4px;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.warning-section {
-  margin-bottom: 20px;
+/* 输入框样式覆盖 */
+:deep(.ant-input),
+:deep(.ant-input-number-input) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
-.info-section {
-  margin-bottom: 20px;
+:deep(.ant-input:focus),
+:deep(.ant-input-focused),
+:deep(.ant-input-number-focused .ant-input-number-input) {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: #14f195 !important;
+  box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;
 }
 
-.burn-form {
-  margin-top: 20px;
+:deep(.ant-input::placeholder) {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
-.form-hint {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  margin-top: 4px;
+:deep(.ant-input-number-handler-wrap) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-.token-info-card {
-  margin: 20px 0;
-  padding: 15px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
+:deep(.ant-input-number-handler) {
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
-.token-info-card h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
+:deep(.ant-input-number-handler:hover) {
+  color: rgba(255, 255, 255, 1) !important;
 }
 
-.balance-card {
-  margin: 20px 0;
+/* 按钮样式覆盖 */
+:deep(.ant-btn-primary:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
-.balance-amount {
-  font-size: 24px;
-  font-weight: bold;
-  color: #1890ff;
-  text-align: center;
-  padding: 10px 0;
+/* MAX 按钮文字颜色 */
+:deep(.ant-btn:not(.ant-btn-primary)) {
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
-.ata-address {
-  margin-top: 10px;
-  text-align: center;
-  color: rgba(0, 0, 0, 0.45);
+:deep(.ant-btn:not(.ant-btn-primary):hover) {
+  color: rgba(255, 255, 255, 1) !important;
 }
 
-.instructions {
-  margin-top: 30px;
-  padding: 20px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
+:deep(.ant-btn:not(.ant-btn-primary):disabled) {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
-.instructions h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
+/* 危险按钮样式 */
+:deep(.ant-btn-dangerous) {
+  background: linear-gradient(to right, #ff4d4f, #ff7875) !important;
+  border: none !important;
 }
 
-.instructions ol {
-  padding-left: 20px;
-  margin: 0;
-}
-
-.instructions li {
-  margin-bottom: 8px;
-  line-height: 1.6;
-}
-
-.notes {
-  margin-top: 20px;
-  padding: 20px;
-  background-color: rgba(255, 77, 79, 0.05);
-  border: 1px solid rgba(255, 77, 79, 0.2);
-  border-radius: 4px;
-}
-
-.notes h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
-  color: #ff4d4f;
-}
-
-.notes ul {
-  padding-left: 20px;
-  margin: 0;
-}
-
-.notes li {
-  margin-bottom: 8px;
-  line-height: 1.6;
+:deep(.ant-btn-dangerous:hover) {
+  background: linear-gradient(to right, #ff7875, #ff9c9e) !important;
 }
 </style>

@@ -1,10 +1,33 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import { message } from 'ant-design-vue';
-import { PublicKey } from '@solana/web3.js';
-import { getAccount, freezeAccount, thawAccount, getMint } from '@solana/spl-token';
-import { getCurrentWallet, walletPublicKey, connected } from '../../utils/wallet';
-import { connection } from '../../utils/wallet';
+import { ref, computed, watch } from 'vue';
+import { message, Modal } from 'ant-design-vue';
+import { PublicKey, Transaction } from '@solana/web3.js';
+import {
+  getMint,
+  getAccount,
+  createFreezeAccountInstruction,
+  createThawAccountInstruction,
+  TOKEN_PROGRAM_ID,
+} from '@solana/spl-token';
+import {
+  LockOutlined,
+  UnlockOutlined,
+  CopyOutlined,
+  InfoCircleOutlined,
+  WalletOutlined,
+  ReloadOutlined,
+  CheckCircleOutlined,
+  GlobalOutlined,
+  ExclamationCircleOutlined,
+  WarningOutlined,
+} from '@ant-design/icons-vue';
+import { useWallet } from '../../hooks/useWallet';
+
+// 使用钱包Hook
+const walletContext = useWallet();
+const walletState = walletContext.walletState;
+const connection = computed(() => walletContext.connection.value);
+const network = walletContext.network;
 
 // 代币Mint地址
 const tokenMintAddress = ref('');
@@ -13,21 +36,29 @@ const targetAccountAddress = ref('');
 // 状态
 const processing = ref(false);
 const loadingInfo = ref(false);
-const accountInfo = ref<any>(null);
-const tokenInfo = ref<any>(null);
+const accountInfo = ref<{
+  address: string;
+  mint: string;
+  owner: string;
+  amount: string;
+  isFrozen: boolean;
+} | null>(null);
+const tokenInfo = ref<{
+  decimals: number;
+  supply: string;
+  mintAuthority: string | null;
+  freezeAuthority: string | null;
+} | null>(null);
 const isFrozen = ref(false);
+const hasFreezeAuthority = ref(false);
+const operationSuccess = ref(false);
+const operationTransactionSignature = ref('');
+const lastOperationType = ref<'freeze' | 'thaw'>('freeze');
 
 // 操作类型
 const operationType = ref<'freeze' | 'thaw'>('freeze');
 
-// 验证函数
-const isFormValid = computed(() => {
-  return tokenMintAddress.value &&
-         targetAccountAddress.value &&
-         walletPublicKey.value !== null;
-});
-
-// 验证Solana地址
+// 验证Solana地址格式
 const isValidSolanaAddress = (address: string): boolean => {
   try {
     new PublicKey(address);
@@ -37,36 +68,67 @@ const isValidSolanaAddress = (address: string): boolean => {
   }
 };
 
+// 验证函数
+const isFormValid = computed(() => {
+  const hasMintAddress = tokenMintAddress.value.trim() !== '';
+  const hasAccountAddress = targetAccountAddress.value.trim() !== '' && isValidSolanaAddress(targetAccountAddress.value);
+  const isConnected = walletState.value?.connected && walletState.value?.publicKey !== null;
+  const hasAuthority = hasFreezeAuthority.value;
+  
+  return hasMintAddress && hasAccountAddress && isConnected && hasAuthority && accountInfo.value !== null;
+});
+
+// 格式化地址
+const formatAddress = (address: string) => {
+  if (!address) return '';
+  return `${address.slice(0, 6)}...${address.slice(-6)}`;
+};
+
 // 获取代币信息
 const fetchTokenInfo = async () => {
-  if (!tokenMintAddress.value) {
+  if (!tokenMintAddress.value.trim()) {
+    return;
+  }
+
+  if (!walletState.value?.connected) {
     return;
   }
 
   loadingInfo.value = true;
   try {
     const mintPubkey = new PublicKey(tokenMintAddress.value);
-    const mintInfo = await getMint(connection, mintPubkey);
+    const mintInfo = await getMint(connection.value, mintPubkey);
 
     tokenInfo.value = {
       decimals: mintInfo.decimals,
       supply: mintInfo.supply.toString(),
-      mintAuthority: mintInfo.mintAuthority?.toString() || 'None',
-      freezeAuthority: mintInfo.freezeAuthority?.toString() || 'None'
+      mintAuthority: mintInfo.mintAuthority?.toString() || null,
+      freezeAuthority: mintInfo.freezeAuthority?.toString() || null,
     };
 
     // 检查是否有冻结权限
     if (!mintInfo.freezeAuthority) {
+      hasFreezeAuthority.value = false;
       message.warning('该代币没有设置冻结权限');
-    } else if (walletPublicKey.value) {
-      const isAuthority = mintInfo.freezeAuthority.toString() === walletPublicKey.value.toString();
+    } else if (walletState.value?.publicKey) {
+      const isAuthority = mintInfo.freezeAuthority.toString() === walletState.value.publicKey.toString();
+      hasFreezeAuthority.value = isAuthority;
       if (!isAuthority) {
         message.warning('您不是该代币的冻结权限持有者');
       }
+    } else {
+      hasFreezeAuthority.value = false;
     }
-  } catch (error) {
-    message.error('获取代币信息失败,请检查Mint地址');
-    console.error(error);
+
+    // 如果已有账户地址，自动获取账户信息
+    if (targetAccountAddress.value.trim()) {
+      await fetchAccountInfo();
+    }
+  } catch (error: any) {
+    message.error(`获取代币信息失败: ${error.message || '请检查Mint地址'}`);
+    console.error('获取代币信息失败:', error);
+    tokenInfo.value = null;
+    hasFreezeAuthority.value = false;
   } finally {
     loadingInfo.value = false;
   }
@@ -74,32 +136,48 @@ const fetchTokenInfo = async () => {
 
 // 获取账户信息
 const fetchAccountInfo = async () => {
-  if (!targetAccountAddress.value || !tokenMintAddress.value) {
+  if (!targetAccountAddress.value.trim() || !tokenMintAddress.value.trim()) {
+    return;
+  }
+
+  if (!isValidSolanaAddress(targetAccountAddress.value)) {
+    message.error('账户地址格式不正确');
     return;
   }
 
   loadingInfo.value = true;
   try {
     const accountPubkey = new PublicKey(targetAccountAddress.value);
-    const accountData = await getAccount(connection, accountPubkey);
+    const accountData = await getAccount(connection.value, accountPubkey);
+
+    // 验证账户是否属于该代币
+    if (accountData.mint.toString() !== tokenMintAddress.value) {
+      message.error('该账户不属于指定的代币');
+      accountInfo.value = null;
+      return;
+    }
 
     accountInfo.value = {
       address: accountData.address.toString(),
       mint: accountData.mint.toString(),
       owner: accountData.owner.toString(),
       amount: accountData.amount.toString(),
-      isFrozen: accountData.isFrozen
+      isFrozen: accountData.isFrozen,
     };
 
     isFrozen.value = accountData.isFrozen;
 
     // 自动设置操作类型
     operationType.value = accountData.isFrozen ? 'thaw' : 'freeze';
-
-    message.success('获取账户信息成功');
-  } catch (error) {
-    message.error('获取账户信息失败,请检查账户地址');
-    console.error(error);
+  } catch (error: any) {
+    if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
+      message.error('账户不存在或地址无效');
+    } else {
+      message.error(`获取账户信息失败: ${error.message || '未知错误'}`);
+    }
+    console.error('获取账户信息失败:', error);
+    accountInfo.value = null;
+    isFrozen.value = false;
   } finally {
     loadingInfo.value = false;
   }
@@ -112,389 +190,674 @@ const handleOperation = async () => {
     return;
   }
 
-  if (!connected.value) {
+  if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
     message.error('请先连接钱包');
     return;
   }
 
-  // 验证地址
-  if (!isValidSolanaAddress(targetAccountAddress.value)) {
-    message.error('目标账户地址格式不正确');
+  if (!hasFreezeAuthority.value) {
+    message.error('您没有该代币的冻结权限');
     return;
   }
 
-  const wallet = getCurrentWallet();
-  if (!wallet || !walletPublicKey.value) {
+  // 二次确认
+  const actionText = operationType.value === 'freeze' ? '冻结' : '解冻';
+  Modal.confirm({
+    title: `确认${actionText}账户`,
+    content: `您确定要${actionText}该代币账户吗？${operationType.value === 'freeze' ? '冻结后，该账户的代币将无法转账。' : '解冻后，该账户将恢复正常交易功能。'}`,
+    okText: `确认${actionText}`,
+    okType: operationType.value === 'freeze' ? 'danger' : 'primary',
+    cancelText: '取消',
+    onOk: async () => {
+      await executeOperation();
+    }
+  });
+};
+
+// 执行操作
+const executeOperation = async () => {
+  if (!walletState.value?.connected || !walletState.value?.publicKey) {
     message.error('请先连接钱包');
     return;
   }
 
-  // 检查是否有冻结权限
-  if (tokenInfo.value && !tokenInfo.value.freezeAuthority) {
-    message.error('该代币没有设置冻结权限');
+  if (!walletState.value?.wallet) {
+    message.error('钱包未连接');
     return;
   }
 
   processing.value = true;
 
   try {
+    // 再次检查钱包状态（防止在操作过程中断开连接）
+    if (!walletState.value?.connected || !walletState.value?.publicKey) {
+      message.error('钱包未连接，请重新连接钱包');
+      return;
+    }
+
+    if (!walletState.value?.wallet) {
+      message.error('钱包适配器未初始化，请重新连接钱包');
+      return;
+    }
+
     const mintPubkey = new PublicKey(tokenMintAddress.value);
     const targetAccountPubkey = new PublicKey(targetAccountAddress.value);
+    const ownerPubkey = walletState.value.publicKey!;
+    const wallet = walletState.value.wallet;
+    const conn = connection.value;
+
+    // 验证钱包适配器是否有效
+    if (!wallet || typeof wallet.sendTransaction !== 'function') {
+      message.error('钱包适配器无效，请重新连接钱包');
+      return;
+    }
+
+    // 检查钱包适配器的连接状态
+    if (wallet.connected === false || !wallet.publicKey) {
+      message.error('钱包未连接，请重新连接钱包');
+      return;
+    }
+
+    // 验证冻结权限
+    if (!hasFreezeAuthority.value) {
+      message.error('您没有该代币的冻结权限');
+      return;
+    }
+
+    // 验证账户状态（确保账户存在且状态正确）
+    try {
+      const accountData = await getAccount(conn, targetAccountPubkey);
+      
+      // 验证账户是否属于该代币
+      if (accountData.mint.toString() !== mintPubkey.toString()) {
+        throw new Error('账户不属于指定的代币');
+      }
+
+      // 验证当前状态是否与操作匹配
+      if (operationType.value === 'freeze' && accountData.isFrozen) {
+        throw new Error('账户已经被冻结');
+      }
+      if (operationType.value === 'thaw' && !accountData.isFrozen) {
+        throw new Error('账户未被冻结，无需解冻');
+      }
+    } catch (error: any) {
+      if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
+        throw new Error('账户不存在或无效');
+      }
+      throw error;
+    }
+
+    // 创建交易
+    const transaction = new Transaction();
 
     if (operationType.value === 'freeze') {
       // 冻结账户
-      await freezeAccount(
-        connection,
-        wallet,
-        targetAccountPubkey,
-        mintPubkey,
-        wallet
+      transaction.add(
+        createFreezeAccountInstruction(
+          targetAccountPubkey, // account (代币账户)
+          mintPubkey, // mint (代币mint地址)
+          ownerPubkey, // freezeAuthority (冻结权限持有者)
+          TOKEN_PROGRAM_ID // programId (可选，默认为 TOKEN_PROGRAM_ID)
+        )
       );
-
-      message.success('成功冻结账户!');
-      isFrozen.value = true;
-      operationType.value = 'thaw';
     } else {
       // 解冻账户
-      await thawAccount(
-        connection,
-        wallet,
-        targetAccountPubkey,
-        mintPubkey,
-        wallet
+      transaction.add(
+        createThawAccountInstruction(
+          targetAccountPubkey, // account (代币账户)
+          mintPubkey, // mint (代币mint地址)
+          ownerPubkey, // freezeAuthority (冻结权限持有者)
+          TOKEN_PROGRAM_ID // programId (可选，默认为 TOKEN_PROGRAM_ID)
+        )
       );
-
-      message.success('成功解冻账户!');
-      isFrozen.value = false;
-      operationType.value = 'freeze';
     }
+
+    // 获取最近的区块哈希
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('finalized');
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = ownerPubkey;
+
+    // 尝试发送交易
+    let signature: string;
+    
+    try {
+      // 方法1: 直接发送（标准方式）
+      signature = await wallet.sendTransaction(transaction, conn);
+    } catch (sendError: any) {
+      // 如果直接发送失败，尝试先签名再发送
+      // 检查钱包是否支持 signTransaction
+      if (typeof wallet.signTransaction === 'function') {
+        try {
+          // 方法2: 先签名再发送
+          const signedTransaction = await wallet.signTransaction(transaction);
+          signature = await conn.sendRawTransaction(signedTransaction.serialize(), {
+            skipPreflight: false,
+            maxRetries: 3,
+          });
+        } catch (signError: any) {
+          throw sendError; // 抛出原始错误
+        }
+      } else {
+        // 钱包不支持 signTransaction，抛出原始错误
+        throw sendError;
+      }
+    }
+
+    // 等待确认
+    const confirmation = await conn.confirmTransaction({
+      signature,
+      blockhash,
+      lastValidBlockHeight,
+    }, 'confirmed');
+
+    if (confirmation.value.err) {
+      throw new Error(`交易确认失败: ${JSON.stringify(confirmation.value.err)}`);
+    }
+
+    operationTransactionSignature.value = signature;
+    lastOperationType.value = operationType.value;
+    operationSuccess.value = true;
+
+    const actionText = operationType.value === 'freeze' ? '冻结' : '解冻';
+    message.success(`成功${actionText}账户！`);
 
     // 刷新账户信息
     await fetchAccountInfo();
-  } catch (error) {
-    message.error(`${operationType.value === 'freeze' ? '冻结' : '解冻'}操作失败`);
-    console.error(error);
+  } catch (error: any) {
+    console.error('操作失败:', error);
+    
+    // 改进错误提示
+    if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
+      message.warning('您已取消交易');
+    } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
+      message.error('钱包未连接，请重新连接钱包后重试');
+    } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
+      message.error('余额不足，无法支付交易费用');
+    } else if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
+      message.error('账户不存在或无效');
+    } else if (error.message?.includes('已经被冻结')) {
+      message.warning('账户已经被冻结，无需重复操作');
+    } else if (error.message?.includes('未被冻结') || error.message?.includes('无需解冻')) {
+      message.warning('账户未被冻结，无需解冻');
+    } else if (error.message?.includes('不属于指定的代币')) {
+      message.error('账户不属于指定的代币');
+    } else if (error.name === 'WalletSendTransactionError' || error.message?.includes('Unexpected error')) {
+      // 提供更详细的错误信息
+      const errorDetails = error.logs ? `\n错误日志: ${JSON.stringify(error.logs)}` : '';
+      message.error(`交易发送失败，可能的原因：\n1. 网络连接问题\n2. 钱包状态异常\n3. 账户权限不足\n4. 交易参数错误\n请检查后重试。${errorDetails}`);
+    } else {
+      const actionText = operationType.value === 'freeze' ? '冻结' : '解冻';
+      const errorMsg = error.message || error.toString() || '未知错误';
+      message.error(`${actionText}操作失败: ${errorMsg}`);
+    }
   } finally {
     processing.value = false;
   }
 };
 
-// 监听地址变化
-const onMintAddressChange = () => {
-  if (tokenMintAddress.value) {
-    fetchTokenInfo();
-  }
+// 复制地址
+const copyAddress = (address: string) => {
+  navigator.clipboard.writeText(address)
+    .then(() => {
+      message.success('地址已复制到剪贴板');
+    })
+    .catch(() => {
+      message.error('复制失败');
+    });
 };
 
-const onAccountAddressChange = () => {
-  if (targetAccountAddress.value && tokenMintAddress.value) {
-    fetchAccountInfo();
-  }
+// 在Solscan查看
+const viewOnSolscan = (mint: string) => {
+  const cluster = network.value === 'mainnet' ? '' : `?cluster=${network.value}`;
+  window.open(`https://solscan.io/token/${mint}${cluster}`, '_blank');
 };
+
+// 查看交易
+const viewTransaction = (signature: string) => {
+  const cluster = network.value === 'mainnet' ? '' : `?cluster=${network.value}`;
+  window.open(`https://solscan.io/tx/${signature}${cluster}`, '_blank');
+};
+
+// 重置表单
+const resetForm = () => {
+  operationSuccess.value = false;
+  operationTransactionSignature.value = '';
+  tokenMintAddress.value = '';
+  targetAccountAddress.value = '';
+  tokenInfo.value = null;
+  accountInfo.value = null;
+  isFrozen.value = false;
+  hasFreezeAuthority.value = false;
+};
+
+// 监听Mint地址变化
+watch(() => tokenMintAddress.value, (newValue) => {
+  if (newValue && newValue.trim()) {
+    fetchTokenInfo();
+  } else {
+    tokenInfo.value = null;
+    accountInfo.value = null;
+    hasFreezeAuthority.value = false;
+  }
+});
+
+// 监听账户地址变化
+watch(() => targetAccountAddress.value, (newValue) => {
+  if (newValue && newValue.trim() && tokenMintAddress.value.trim()) {
+    fetchAccountInfo();
+  } else {
+    accountInfo.value = null;
+    isFrozen.value = false;
+  }
+});
+
+// 监听钱包连接状态
+watch(() => walletState.value?.connected, (isConnected) => {
+  if (isConnected && tokenMintAddress.value) {
+    fetchTokenInfo();
+  } else {
+    hasFreezeAuthority.value = false;
+  }
+});
 
 // 默认导出
 defineOptions({
-  name: 'FreezeManage'
+  name: 'FreezeManage',
 });
 </script>
 
 <template>
-  <div class="freeze-manage-container">
-    <h2>冻结管理</h2>
-
-    <div class="warning-section">
-      <a-alert
-        type="warning"
-        show-icon
-        message="警告"
-        description="冻结和解冻操作需要代币的冻结权限(Freeze Authority)。只有冻结权限持有者才能执行这些操作。冻结后,该账户的代币将无法转账。"
-      />
+  <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] min-h-full flex flex-col">
+    <!-- 未连接钱包提示 -->
+    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px] flex-1">
+      <div class="text-center">
+        <div class="mb-6 animate-bounce">
+          <WalletOutlined class="text-6xl text-white/30" />
+        </div>
+        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
+        <p class="text-white/60">连接钱包后即可管理代币账户冻结状态</p>
+      </div>
     </div>
 
-    <a-form layout="vertical" class="freeze-form">
-      <a-form-item label="代币Mint地址">
-        <a-input
-          v-model:value="tokenMintAddress"
-          placeholder="请输入代币的Mint地址"
-          @change="onMintAddressChange"
-        />
-        <div class="form-hint">输入要管理的代币的Mint地址</div>
-      </a-form-item>
-
-      <!-- 代币信息显示 -->
-      <div v-if="tokenInfo" class="token-info-card">
-        <h3>代币信息</h3>
-        <a-descriptions bordered :column="1">
-          <a-descriptions-item label="小数位数">
-            {{ tokenInfo.decimals }}
-          </a-descriptions-item>
-          <a-descriptions-item label="当前供应量">
-            {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toFixed(tokenInfo.decimals) }}
-          </a-descriptions-item>
-          <a-descriptions-item label="冻结权限">
-            {{ tokenInfo.freezeAuthority }}
-          </a-descriptions-item>
-        </a-descriptions>
-      </div>
-
-      <a-form-item label="目标账户地址 (ATA)">
-        <a-input
-          v-model:value="targetAccountAddress"
-          placeholder="请输入要冻结/解冻的代币账户地址"
-          @change="onAccountAddressChange"
-        />
-        <div class="form-hint">输入要管理的关联代币账户地址</div>
-      </a-form-item>
-
-      <!-- 账户信息显示 -->
-      <div v-if="accountInfo" class="account-info-card">
-        <h3>账户信息</h3>
-        <a-descriptions bordered :column="1">
-          <a-descriptions-item label="账户地址">
-            <div class="address-text">
-              {{ accountInfo.address.slice(0, 8) }}...{{ accountInfo.address.slice(-8) }}
+    <!-- 成功状态 -->
+    <div v-else-if="operationSuccess" class="flex-1 flex flex-col min-h-0 py-3">
+      <div
+        class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(82,196,26,0.3)] rounded-2xl p-6 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(82,196,26,0.5)] hover:shadow-[0_20px_40px_rgba(82,196,26,0.2)]">
+        <div
+          class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none">
+        </div>
+        <div class="relative z-[1]">
+          <div class="flex items-center gap-3 mb-6">
+            <CheckCircleOutlined class="text-3xl text-[#52c41a]" />
+            <div>
+              <h3 class="m-0 text-xl font-semibold text-white">操作成功！</h3>
+              <p class="m-0 text-sm text-white/60 mt-1">账户已成功{{ lastOperationType === 'freeze' ? '冻结' : '解冻' }}，请查看交易详情</p>
             </div>
-          </a-descriptions-item>
-          <a-descriptions-item label="代币Mint">
-            <div class="address-text">
-              {{ accountInfo.mint.slice(0, 8) }}...{{ accountInfo.mint.slice(-8) }}
-            </div>
-          </a-descriptions-item>
-          <a-descriptions-item label="所有者">
-            <div class="address-text">
-              {{ accountInfo.owner.slice(0, 8) }}...{{ accountInfo.owner.slice(-8) }}
-            </div>
-          </a-descriptions-item>
-          <a-descriptions-item label="余额">
-            {{ (Number(accountInfo.amount) / Math.pow(10, tokenInfo?.decimals || 9)).toFixed(tokenInfo?.decimals || 9) }}
-          </a-descriptions-item>
-          <a-descriptions-item label="状态">
-            <a-tag :color="isFrozen ? 'error' : 'success'">
-              {{ isFrozen ? '已冻结' : '正常' }}
-            </a-tag>
-          </a-descriptions-item>
-        </a-descriptions>
-      </div>
-
-      <!-- 操作类型选择 -->
-      <div v-if="accountInfo" class="operation-type-card">
-        <h3>选择操作</h3>
-        <a-radio-group v-model:value="operationType" button-style="solid">
-          <a-radio-button value="freeze" :disabled="isFrozen">
-            <template #icon>
-              <LockOutlined />
-            </template>
-            冻结账户
-          </a-radio-button>
-          <a-radio-button value="thaw" :disabled="!isFrozen">
-            <template #icon>
-              <UnlockOutlined />
-            </template>
-            解冻账户
-          </a-radio-button>
-        </a-radio-group>
-
-        <div class="operation-description">
-          <div v-if="operationType === 'freeze'" class="freeze-desc">
-            <p>
-              <WarningOutlined style="color: #faad14; margin-right: 8px;" />
-              <strong>冻结操作</strong>
-            </p>
-            <p>冻结后,该账户的代币将无法转账或交易。</p>
           </div>
-          <div v-else class="thaw-desc">
-            <p>
-              <CheckCircleOutlined style="color: #52c41a; margin-right: 8px;" />
-              <strong>解冻操作</strong>
-            </p>
-            <p>解冻后,该账户将恢复正常交易功能。</p>
+
+          <div class="space-y-4">
+            <!-- 交易签名 -->
+            <div v-if="operationTransactionSignature" class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="text-sm font-medium text-white/80">交易签名</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <div
+                  class="flex-1 px-4 py-2.5 bg-white/5 rounded-lg border border-white/10 text-sm font-mono text-white/90 break-all">
+                  {{ operationTransactionSignature }}
+                </div>
+                <a-button @click="copyAddress(operationTransactionSignature)"
+                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                  <template #icon>
+                    <CopyOutlined />
+                  </template>
+                  复制
+                </a-button>
+                <a-button @click="viewTransaction(operationTransactionSignature)"
+                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                  <template #icon>
+                    <GlobalOutlined />
+                  </template>
+                  Solscan
+                </a-button>
+              </div>
+            </div>
+
+            <!-- 账户状态 -->
+            <div v-if="accountInfo" class="grid grid-cols-2 gap-4">
+              <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+                <div class="text-xs font-medium text-white/60 mb-1">账户状态</div>
+                <div class="text-base font-semibold" :class="isFrozen ? 'text-red-400' : 'text-green-400'">
+                  {{ isFrozen ? '已冻结' : '正常' }}
+                </div>
+              </div>
+              <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+                <div class="text-xs font-medium text-white/60 mb-1">账户余额</div>
+                <div class="text-base font-semibold text-white">
+                  {{ (Number(accountInfo.amount) / Math.pow(10, tokenInfo?.decimals || 9)).toLocaleString(undefined, { maximumFractionDigits: tokenInfo?.decimals || 9 }) }}
+                </div>
+              </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="flex gap-3 pt-4">
+              <a-button @click="resetForm"
+                class="flex-1 flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-2.5 h-auto text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300">
+                <template #icon>
+                  <LockOutlined />
+                </template>
+                继续管理
+              </a-button>
+            </div>
           </div>
         </div>
       </div>
-
-      <a-form-item v-if="accountInfo">
-        <a-space>
-          <a-button
-            :type="operationType === 'freeze' ? 'primary' : 'default'"
-            danger
-            :loading="processing"
-            :disabled="!isFormValid"
-            @click="handleOperation"
-          >
-            <template #icon>
-              <LockOutlined v-if="operationType === 'freeze'" />
-              <UnlockOutlined v-else />
-            </template>
-            {{ operationType === 'freeze' ? '冻结账户' : '解冻账户' }}
-          </a-button>
-          <a-button @click="fetchAccountInfo" :disabled="!targetAccountAddress">
-            刷新信息
-          </a-button>
-        </a-space>
-      </a-form-item>
-    </a-form>
-
-    <!-- 操作说明 -->
-    <div class="instructions">
-      <h3>操作步骤</h3>
-      <ol>
-        <li>输入代币的Mint地址</li>
-        <li>检查代币信息,确保您是冻结权限持有者</li>
-        <li>输入要管理的关联代币账户地址</li>
-        <li>查看账户当前状态(已冻结或正常)</li>
-        <li>选择要执行的操作(冻结或解冻)</li>
-        <li>点击按钮执行操作</li>
-      </ol>
     </div>
 
-    <!-- 注意事项 -->
-    <div class="notes">
-      <h3>注意事项</h3>
-      <ul>
-        <li>只有代币的冻结权限持有者才能执行冻结/解冻操作</li>
-        <li>冻结账户会阻止该账户的代币被转账或交易</li>
-        <li>解冻账户会恢复正常的交易功能</li>
-        <li>冻结/解冻操作需要支付交易费用(gas fee)</li>
-        <li>请确保您有权操作目标账户,否则操作将失败</li>
-      </ul>
+    <!-- 冻结管理表单 -->
+    <div v-else class="w-full py-3">
+      <div
+        class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border border-white/10 rounded-2xl p-6 overflow-visible transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]">
+        <div
+          class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none">
+        </div>
+        <div class="relative z-[1] space-y-6">
+          <!-- Mint 地址 -->
+          <div>
+            <label class="block text-sm font-medium text-white/90 mb-2">
+              Mint 地址 <span class="text-red-400">*</span>
+            </label>
+            <a-input
+              v-model:value="tokenMintAddress"
+              placeholder="请输入代币的Mint地址"
+              size="large"
+              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
+              :class="{ '!border-solana-green': tokenMintAddress }"
+            />
+            <div class="mt-1.5 text-xs text-white/50">输入要管理的代币的Mint地址</div>
+          </div>
+
+          <!-- 代币信息显示 -->
+          <div v-if="tokenInfo" class="space-y-4">
+            <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="m-0 text-base font-semibold text-white">代币信息</h3>
+                <div class="flex items-center gap-2">
+                  <a-button
+                    @click="viewOnSolscan(tokenMintAddress)"
+                    size="small"
+                    class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                    <template #icon>
+                      <GlobalOutlined />
+                    </template>
+                    Solscan
+                  </a-button>
+                  <a-button
+                    @click="fetchTokenInfo"
+                    :loading="loadingInfo"
+                    size="small"
+                    class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                    <template #icon>
+                      <ReloadOutlined />
+                    </template>
+                    刷新
+                  </a-button>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                  <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">当前供应量</div>
+                  <div class="text-sm font-semibold text-white truncate">
+                    {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toLocaleString() }}
+                  </div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">冻结权限</div>
+                  <div class="text-xs font-mono text-white/90 truncate">
+                    {{ tokenInfo.freezeAuthority ? formatAddress(tokenInfo.freezeAuthority) : '无' }}
+                  </div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">权限状态</div>
+                  <div class="text-sm font-semibold" :class="hasFreezeAuthority ? 'text-green-400' : 'text-red-400'">
+                    {{ hasFreezeAuthority ? '有权限' : '无权限' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 权限警告 -->
+            <div v-if="!hasFreezeAuthority" class="flex items-start gap-3 p-4 bg-[rgba(255,77,79,0.1)] rounded-xl border border-[rgba(255,77,79,0.2)]">
+              <ExclamationCircleOutlined class="text-red-400 text-lg shrink-0 mt-0.5" />
+              <div class="flex-1">
+                <div class="text-sm font-medium text-red-400 mb-1">无冻结权限</div>
+                <div class="text-xs text-white/70">
+                  您不是该代币的冻结权限持有者，无法执行冻结/解冻操作。请使用具有冻结权限的钱包地址。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 目标账户地址 -->
+          <div>
+            <label class="block text-sm font-medium text-white/90 mb-2">
+              目标账户地址 (ATA) <span class="text-red-400">*</span>
+            </label>
+            <a-input
+              v-model:value="targetAccountAddress"
+              placeholder="请输入要冻结/解冻的代币账户地址"
+              size="large"
+              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
+              :class="{
+                '!border-solana-green': targetAccountAddress && isValidSolanaAddress(targetAccountAddress),
+                '!border-red-500': targetAccountAddress && !isValidSolanaAddress(targetAccountAddress)
+              }"
+            />
+            <div class="mt-1.5 text-xs text-white/50">输入要管理的关联代币账户地址</div>
+            <div v-if="targetAccountAddress && !isValidSolanaAddress(targetAccountAddress)" class="mt-1.5 text-xs text-red-400">
+              地址格式不正确
+            </div>
+          </div>
+
+          <!-- 账户信息显示 -->
+          <div v-if="accountInfo" class="space-y-4">
+            <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="m-0 text-base font-semibold text-white">账户信息</h3>
+                <a-button
+                  @click="fetchAccountInfo"
+                  :loading="loadingInfo"
+                  size="small"
+                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                  <template #icon>
+                    <ReloadOutlined />
+                  </template>
+                  刷新
+                </a-button>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">账户地址</div>
+                  <div class="flex items-center gap-2">
+                    <code class="text-xs text-white/70 font-mono flex-1 truncate">{{ formatAddress(accountInfo.address) }}</code>
+                    <a-button
+                      @click="copyAddress(accountInfo.address)"
+                      type="text"
+                      size="small"
+                      class="p-0 h-auto text-white/50 hover:text-white">
+                      <template #icon>
+                        <CopyOutlined />
+                      </template>
+                    </a-button>
+                  </div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">账户状态</div>
+                  <div class="text-sm font-semibold" :class="isFrozen ? 'text-red-400' : 'text-green-400'">
+                    {{ isFrozen ? '已冻结' : '正常' }}
+                  </div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">账户余额</div>
+                  <div class="text-sm font-semibold text-white">
+                    {{ (Number(accountInfo.amount) / Math.pow(10, tokenInfo?.decimals || 9)).toLocaleString(undefined, { maximumFractionDigits: tokenInfo?.decimals || 9 }) }}
+                  </div>
+                </div>
+                <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div class="text-xs font-medium text-white/60 mb-1">账户所有者</div>
+                  <div class="text-xs font-mono text-white/70 truncate">{{ formatAddress(accountInfo.owner) }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 操作类型选择 -->
+            <div class="bg-white/5 rounded-xl p-4 border border-white/10">
+              <h3 class="m-0 text-base font-semibold text-white mb-4">选择操作</h3>
+              <a-radio-group v-model:value="operationType" button-style="solid" class="w-full">
+                <a-radio-button value="freeze" :disabled="isFrozen" class="flex-1">
+                  <template #icon>
+                    <LockOutlined />
+                  </template>
+                  冻结账户
+                </a-radio-button>
+                <a-radio-button value="thaw" :disabled="!isFrozen" class="flex-1">
+                  <template #icon>
+                    <UnlockOutlined />
+                  </template>
+                  解冻账户
+                </a-radio-button>
+              </a-radio-group>
+
+              <div class="mt-4 p-3 rounded-lg" :class="operationType === 'freeze' ? 'bg-[rgba(250,173,20,0.1)] border border-[rgba(250,173,20,0.2)]' : 'bg-[rgba(82,196,26,0.1)] border border-[rgba(82,196,26,0.2)]'">
+                <div v-if="operationType === 'freeze'" class="flex items-start gap-2">
+                  <WarningOutlined class="text-[#faad14] text-base shrink-0 mt-0.5" />
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-[#faad14] mb-1">冻结操作</div>
+                    <div class="text-xs text-white/70">冻结后，该账户的代币将无法转账或交易。</div>
+                  </div>
+                </div>
+                <div v-else class="flex items-start gap-2">
+                  <CheckCircleOutlined class="text-[#52c41a] text-base shrink-0 mt-0.5" />
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-[#52c41a] mb-1">解冻操作</div>
+                    <div class="text-xs text-white/70">解冻后，该账户将恢复正常交易功能。</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 提示信息 -->
+          <div
+            class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
+            <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
+            <div class="flex-1">
+              <div class="text-sm font-medium text-solana-green mb-1">操作提示</div>
+              <div class="text-xs text-white/70">
+                <ul class="m-0 pl-4 space-y-1">
+                  <li>只有代币的冻结权限持有者才能执行冻结/解冻操作</li>
+                  <li>冻结账户会阻止该账户的代币被转账或交易</li>
+                  <li>解冻账户会恢复正常的交易功能</li>
+                  <li>请确保您有权操作目标账户，否则操作将失败</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="pt-2">
+            <a-button
+              :type="operationType === 'freeze' ? 'primary' : 'default'"
+              danger
+              :loading="processing"
+              :disabled="!isFormValid"
+              @click="handleOperation"
+              size="large"
+              block
+              :class="operationType === 'freeze' 
+                ? 'flex items-center justify-center bg-gradient-to-r from-red-500 to-red-600 border-none text-white font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(255,77,79,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0'
+                : 'flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0'">
+              <template #icon>
+                <LockOutlined v-if="operationType === 'freeze'" />
+                <UnlockOutlined v-else />
+              </template>
+              {{ processing ? (operationType === 'freeze' ? '冻结中...' : '解冻中...') : (operationType === 'freeze' ? '冻结账户' : '解冻账户') }}
+            </a-button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
-<script lang="ts">
-import { LockOutlined, UnlockOutlined, WarningOutlined, CheckCircleOutlined } from '@ant-design/icons-vue';
-
-export default {
-  components: {
-    LockOutlined,
-    UnlockOutlined,
-    WarningOutlined,
-    CheckCircleOutlined
-  }
-};
-</script>
-
 <style scoped>
-.freeze-manage-container {
-  padding: 20px;
-  background: #fff;
-  border-radius: 4px;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.warning-section {
-  margin-bottom: 20px;
+/* 输入框样式覆盖 */
+:deep(.ant-input) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
-.freeze-form {
-  margin-top: 20px;
+:deep(.ant-input:focus),
+:deep(.ant-input-focused) {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: #14f195 !important;
+  box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;
 }
 
-.form-hint {
-  font-size: 0.8rem;
-  opacity: 0.7;
-  margin-top: 4px;
+:deep(.ant-input::placeholder) {
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
-.token-info-card,
-.account-info-card {
-  margin: 20px 0;
-  padding: 15px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
+/* 单选按钮组样式 */
+:deep(.ant-radio-group) {
+  display: flex;
+  gap: 8px;
 }
 
-.token-info-card h3,
-.account-info-card h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
+:deep(.ant-radio-button-wrapper) {
+  flex: 1;
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
-.address-text {
-  font-family: monospace;
-  font-size: 12px;
-  word-break: break-all;
+:deep(.ant-radio-button-wrapper:hover) {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
-.operation-type-card {
-  margin: 20px 0;
-  padding: 15px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
+:deep(.ant-radio-button-wrapper-checked) {
+  background-color: rgba(20, 241, 149, 0.2) !important;
+  border-color: #14f195 !important;
+  color: #14f195 !important;
 }
 
-.operation-type-card h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
+:deep(.ant-radio-button-wrapper:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.operation-description {
-  margin-top: 15px;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-.freeze-desc {
-  background-color: rgba(250, 173, 20, 0.1);
-}
-
-.thaw-desc {
-  background-color: rgba(82, 196, 26, 0.1);
-}
-
-.operation-description p {
-  margin: 5px 0;
-}
-
-.instructions {
-  margin-top: 30px;
-  padding: 20px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 4px;
-}
-
-.instructions h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.instructions ol {
-  padding-left: 20px;
-  margin: 0;
-}
-
-.instructions li {
-  margin-bottom: 8px;
-  line-height: 1.6;
-}
-
-.notes {
-  margin-top: 20px;
-  padding: 20px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-}
-
-.notes h3 {
-  margin-top: 0;
-  margin-bottom: 15px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.notes ul {
-  padding-left: 20px;
-  margin: 0;
-}
-
-.notes li {
-  margin-bottom: 8px;
-  line-height: 1.6;
+/* 按钮样式覆盖 */
+:deep(.ant-btn-primary:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 </style>
