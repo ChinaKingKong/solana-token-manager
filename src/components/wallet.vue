@@ -131,26 +131,23 @@ const availableWallets = computed(() => {
         placement="bottomRight"
         :overlayClassName="'wallet-menu-dropdown'"
       >
-        <div class="flex items-center gap-3 px-4 py-2 bg-white/10 rounded-xl cursor-pointer transition-all duration-300 ease-in-out hover:bg-white/15">
-          <div class="w-8 h-8 flex items-center justify-center shrink-0">
+        <div class="flex items-center gap-3 px-4 bg-white/10 rounded-xl cursor-pointer transition-all duration-300 ease-in-out hover:bg-white/15" style="height: 40px;">
+          <div class="w-6 h-6 flex items-center justify-center shrink-0">
             <img v-if="walletState.wallet?.icon" :src="walletState.wallet.icon" :alt="walletState.wallet?.name" class="w-full h-full object-contain" />
-            <WalletOutlined v-else class="text-xl text-white" />
+            <WalletOutlined v-else class="text-base text-white" />
           </div>
-          <div class="flex flex-col gap-0.5">
-            <div class="text-sm font-semibold text-white font-mono">{{ getWalletDisplayText }}</div>
-            <div class="text-xs text-solana-green font-medium">{{ balanceDisplay }} SOL</div>
-          </div>
+          <div class="text-sm font-semibold text-white font-mono">{{ getWalletDisplayText }}</div>
           <DownOutlined class="text-xs text-white/50 font-bold transition-all duration-200 ease-in-out group-hover:text-white/80" />
         </div>
 
         <template #overlay>
           <a-menu class="bg-white border border-black/10 rounded-lg p-1 min-w-[160px] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
-            <a-menu-item key="copy" @click="copyAddress" class="flex items-center gap-2.5 px-3 py-2.5 text-black/85 rounded-md transition-all duration-200 ease-in-out hover:bg-[rgba(20,241,149,0.1)] hover:text-solana-green">
+            <a-menu-item key="copy" @click="copyAddress" class="flex items-center gap-4 px-3 py-2.5 text-black/85 rounded-md transition-all duration-200 ease-in-out hover:bg-[rgba(20,241,149,0.1)] hover:text-solana-green">
               <CopyOutlined class="text-sm" />
               <span>复制地址</span>
             </a-menu-item>
             <a-menu-divider />
-            <a-menu-item key="disconnect" @click="handleDisconnect" class="flex items-center gap-2.5 px-3 py-2.5 text-[rgba(255,77,79,0.85)] rounded-md transition-all duration-200 ease-in-out hover:bg-[rgba(255,77,79,0.1)] hover:text-[#ff4d4f]">
+            <a-menu-item key="disconnect" @click="handleDisconnect" class="flex items-center gap-4 px-3 py-2.5 text-[rgba(255,77,79,0.85)] rounded-md transition-all duration-200 ease-in-out hover:bg-[rgba(255,77,79,0.1)] hover:text-[#ff4d4f]">
               <DisconnectOutlined class="text-sm" />
               <span>断开连接</span>
             </a-menu-item>
@@ -166,7 +163,7 @@ const availableWallets = computed(() => {
       size="large"
       @click="toggleWalletConnection"
       :loading="walletState.connecting"
-      class="bg-gradient-solana border-none text-dark-bg font-semibold px-6 h-11 text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] active:-translate-y-0.5 focus:-translate-y-0.5 focus:shadow-[0_6px_20px_rgba(20,241,149,0.4)] focus:outline-none"
+      class="bg-gradient-solana border-none text-dark-bg font-semibold px-6 h-9 text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] active:-translate-y-0.5 focus:-translate-y-0.5 focus:shadow-[0_6px_20px_rgba(20,241,149,0.4)] focus:outline-none flex items-center justify-center gap-1"
     >
       <template #icon><WalletOutlined /></template>
       {{ walletState.connecting ? '连接中...' : '连接钱包' }}
@@ -236,6 +233,10 @@ const availableWallets = computed(() => {
   background: transparent;
   padding: 0;
   margin: 0;
+}
+
+:deep(.wallet-menu-dropdown .ant-dropdown-menu-item .anticon) {
+  margin-right: 16px !important;
 }
 
 :deep(.ant-dropdown-menu-item-divider) {

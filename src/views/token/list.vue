@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
-import { ReloadOutlined } from '@ant-design/icons-vue';
+import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined } from '@ant-design/icons-vue';
 import { PublicKey } from '@solana/web3.js';
 import { useWallet } from '../../composables/useWallet';
 
@@ -22,10 +22,11 @@ interface TokenData {
 // 使用钱包Hook
 const walletContext = useWallet() as any;
 const walletState = walletContext.walletState;
-// connection 在 useWallet 中是一个 ref，需要访问 .value
+const network = walletContext.network;
+// connection 在 useWallet 中是一个 computed，需要访问 .value
 const connection = computed(() => {
   const conn = walletContext.connection;
-  // connection 可能是 ref，也可能是直接的 Connection 对象
+  // connection 是 computed，需要访问 .value 获取实际的 Connection 对象
   if (conn && typeof conn === 'object' && 'value' in conn) {
     return conn.value;
   }
@@ -88,7 +89,6 @@ const refreshBalance = async () => {
     message.success('余额已更新');
   } catch (error) {
     message.error('获取余额失败');
-    console.error(error);
   }
 };
 
@@ -97,11 +97,6 @@ const fetchTokenList = async () => {
   if (!walletState.value) {
     return;
   }
-
-    connected: walletState.value.connected,
-    hasPublicKey: !!walletState.value.publicKey,
-    publicKey: walletState.value.publicKey?.toString()
-  });
 
   if (!walletState.value.connected) {
     return;
@@ -123,7 +118,7 @@ const fetchTokenList = async () => {
     // 2. filter 对象: { mint: ... } 或 { programId: ... }
     // 3. config 对象: { encoding: ... }
     const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-    
+
     const conn = connection.value;
     const response = await fetch(conn.rpcEndpoint, {
       method: 'POST',
@@ -149,7 +144,6 @@ const fetchTokenList = async () => {
     const data = await response.json();
 
     if (data.error) {
-      console.error('RPC 错误详情:', data.error);
       throw new Error(data.error.message);
     }
 
@@ -165,9 +159,6 @@ const fetchTokenList = async () => {
 
     // 确保 PublicKey 对象有效
     const publicKey = walletState.value.publicKey;
-
-    // 尝试使用 getAccountInfo 先测试 RPC 连接
-    const accountInfo = await conn.getAccountInfo(publicKey);
 
     let tokenAccountsResponse;
 
@@ -190,11 +181,6 @@ const fetchTokenList = async () => {
       tokenAccountsResponse = await fetchTokenAccountsDirectRPC();
     }
 
-      hasContext: !!tokenAccountsResponse.context,
-      hasValue: !!tokenAccountsResponse.value,
-      valueLength: tokenAccountsResponse.value?.length
-    });
-
     const tokenList: TokenData[] = [];
 
     // getTokenAccountsByOwner 返回 { context, value } 结构
@@ -208,7 +194,7 @@ const fetchTokenList = async () => {
         }
 
         const accountData = account.account.data;
-        
+
         // 检查 parsed 数据
         if (!accountData.parsed || !accountData.parsed.info) {
           continue;
@@ -224,12 +210,6 @@ const fetchTokenList = async () => {
 
         const pubkeyString = account.pubkey.toString ? account.pubkey.toString() : String(account.pubkey);
 
-          mint: parsedData.info.mint,
-          ata: pubkeyString,
-          余额: tokenAmount.uiAmountString,
-          decimals: tokenAmount.decimals
-        });
-
         // 显示所有代币，包括余额为0的
         tokenList.push({
           mint: parsedData.info.mint,
@@ -238,7 +218,7 @@ const fetchTokenList = async () => {
           decimals: tokenAmount.decimals,
         });
       } catch (error) {
-        console.error('❌ 处理代币账户时出错:', error, account);
+        // 忽略单个代币账户处理错误
       }
     }
 
@@ -248,20 +228,12 @@ const fetchTokenList = async () => {
     await fetchTokenMetadata();
 
   } catch (error: any) {
-    console.error('❌ 获取代币列表失败:', error);
-    console.error('错误堆栈:', error.stack);
-
     message.error(`获取代币列表失败: ${error.message || '未知错误'}`);
 
     // 更新调试信息
     debugInfo.value.errorCount++;
     debugInfo.value.lastError = error.message || '未知错误';
     debugInfo.value.lastFetchTime = new Date();
-
-    // 显示详细的错误信息
-    if (error.message) {
-      console.error('错误详情:', error.message);
-    }
 
     // 检查是否是网络问题
     if (error.message?.includes('fetch') || error.message?.includes('network')) {
@@ -309,16 +281,36 @@ const fetchTokenMetadata = async () => {
     });
 
   } catch (error: any) {
-    console.error('获取代币元数据失败:', error);
     // 元数据获取失败不影响显示，只是没有图标和名称
     message.warning('获取代币元数据失败，将显示默认信息');
   }
 };
 
-// 计算总价值
+// 稳定币列表（价格固定为 1 USD）
+const stableCoins = ['USDT', 'USDC', 'USD', 'USDC-Dev', 'USDT-Dev'];
+
+// 获取代币的 USD 价格
+const getTokenPrice = (token: TokenData): number => {
+  // 如果代币有价格，直接使用
+  if (token.price) {
+    return token.price;
+  }
+  
+  // 如果是稳定币，价格为 1 USD
+  if (token.symbol && stableCoins.includes(token.symbol.toUpperCase())) {
+    return 1;
+  }
+  
+  // 其他代币暂时返回 0（可以后续接入价格 API）
+  return 0;
+};
+
+// 计算总价值（按 USDT 1:1 转换为 USD）
 const totalValue = computed(() => {
   return tokens.value.reduce((sum, token) => {
-    return sum + (token.value || 0);
+    const price = getTokenPrice(token);
+    const tokenValue = token.balance * price;
+    return sum + tokenValue;
   }, 0);
 });
 
@@ -361,6 +353,23 @@ onMounted(() => {
 watch(() => walletState.value?.connected, (isConnected) => {
   if (isConnected) {
     fetchTokenList();
+  } else {
+    // 断开连接时清空代币列表
+    tokens.value = [];
+    currentPage.value = 1;
+  }
+});
+
+// 监听网络变化
+watch(() => network.value, (newNetwork, oldNetwork) => {
+  if (oldNetwork && newNetwork !== oldNetwork) {
+    // 网络切换时清空代币列表
+    tokens.value = [];
+    currentPage.value = 1;
+    // 如果钱包已连接，重新获取代币列表
+    if (walletState.value?.connected) {
+      fetchTokenList();
+    }
   }
 });
 
@@ -372,66 +381,67 @@ defineOptions({
 
 <template>
   <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] h-full flex flex-col">
-    <!-- 页面标题区域 -->
-    <div class="mb-6 shrink-0">
-      <div class="flex justify-end items-center gap-4">
-        <div class="shrink-0">
-          <a-button 
-            :loading="loading" 
-            @click="refreshBalance" 
-            size="large"
-            class="bg-white/10 border border-white/20 text-white h-10 px-5 text-sm font-medium rounded-[10px] transition-all duration-300 ease-in-out hover:bg-[rgba(20,241,149,0.15)] hover:border-[rgba(20,241,149,0.4)] hover:text-solana-green hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(20,241,149,0.2)] active:translate-y-0"
-          >
-            <template #icon><ReloadOutlined /></template>
-            刷新余额
-          </a-button>
-        </div>
-      </div>
-    </div>
-
     <!-- 资产概览卡片 -->
-    <div class="mb-6 shrink-0">
+    <div class="shrink-0 mt-3">
       <div class="flex flex-row gap-6 flex-nowrap w-full">
-        <div class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(20,241,149,0.3)] rounded-2xl p-7 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(20,241,149,0.5)]">
-          <div class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
-          <div class="relative flex items-center gap-5 z-[1]">
-            <div class="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-4xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
-              <span class="sol-symbol text-[42px] text-solana-green">◎</span>
+        <div
+          class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(20,241,149,0.3)] rounded-2xl p-4 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(20,241,149,0.5)]">
+          <div
+            class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none">
+          </div>
+          <div class="relative flex items-center gap-4 z-[1]">
+            <div
+              class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
+              <WalletOutlined class="text-[28px] text-solana-green" />
             </div>
             <div class="flex-1 min-w-0 overflow-hidden">
-              <div class="text-[13px] text-white/60 mb-2 font-medium">SOL 余额</div>
-              <div class="text-2xl font-bold text-white leading-tight mb-1.5 break-words max-w-full" style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">{{ walletBalance.toFixed(4) }}</div>
-              <div class="text-sm text-white/50 font-medium">SOL</div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-lg font-bold text-white leading-tight break-words"
+                  style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">{{ walletBalance.toFixed(4) }}</div>
+                <div class="text-sm text-white/50 font-medium">SOL</div>
+              </div>
             </div>
           </div>
           <div class="card-glow"></div>
         </div>
 
-        <div class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(153,69,255,0.3)] rounded-2xl p-7 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(153,69,255,0.5)]">
-          <div class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
-          <div class="relative flex items-center gap-5 z-[1]">
-            <div class="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-4xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
-              <span>🪙</span>
+        <div
+          class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(153,69,255,0.3)] rounded-2xl p-4 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(153,69,255,0.5)]">
+          <div
+            class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none">
+          </div>
+          <div class="relative flex items-center gap-4 z-[1]">
+            <div
+              class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
+              <AppstoreOutlined class="text-[28px] text-white/90" />
             </div>
             <div class="flex-1 min-w-0 overflow-hidden">
-              <div class="text-[13px] text-white/60 mb-2 font-medium">代币种类</div>
-              <div class="text-2xl font-bold text-white leading-tight mb-1.5 break-words max-w-full" style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">{{ tokens.length }}</div>
-              <div class="text-sm text-white/50 font-medium">种</div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-lg font-bold text-white leading-tight break-words"
+                  style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">{{ tokens.length }}</div>
+                <div class="text-sm text-white/50 font-medium">Tokens</div>
+              </div>
             </div>
           </div>
           <div class="card-glow"></div>
         </div>
 
-        <div class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(82,196,26,0.3)] rounded-2xl p-7 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(82,196,26,0.5)]">
-          <div class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
-          <div class="relative flex items-center gap-5 z-[1]">
-            <div class="w-[72px] h-[72px] rounded-2xl flex items-center justify-center text-4xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
-              <span>💰</span>
+        <div
+          class="overview-card relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(82,196,26,0.3)] rounded-2xl p-4 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] flex-1 min-w-0 hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:border-[rgba(82,196,26,0.5)]">
+          <div
+            class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none">
+          </div>
+          <div class="relative flex items-center gap-4 z-[1]">
+            <div
+              class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-[10px] shrink-0 shadow-[0_8px_16px_rgba(0,0,0,0.2)]">
+              <DollarCircleOutlined class="text-[28px] text-white/90" />
             </div>
             <div class="flex-1 min-w-0 overflow-hidden">
-              <div class="text-[13px] text-white/60 mb-2 font-medium">总估值</div>
-              <div class="text-2xl font-bold text-white leading-tight mb-1.5 break-words max-w-full" style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">${{ totalValue.toFixed(2) }}</div>
-              <div class="text-sm text-white/50 font-medium">USD</div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-lg font-bold text-white leading-tight break-words"
+                  style="text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">${{ totalValue.toFixed(2) }}</div>
+                <div class="text-sm text-white/50 font-medium">USD</div>
+              </div>
             </div>
           </div>
           <div class="card-glow"></div>
@@ -452,9 +462,7 @@ defineOptions({
 
     <!-- 空状态 -->
     <div v-else-if="tokens.length === 0 && !loading" class="flex items-center justify-center min-h-[400px]">
-      <a-empty
-        description="暂无代币"
-      >
+      <a-empty description="暂无代币">
         <template #description>
           <span class="text-white/65">您还没有任何代币，可以去创建新代币</span>
         </template>
@@ -472,16 +480,28 @@ defineOptions({
     </div>
 
     <!-- 代币列表 -->
-    <div v-else class="flex-1 flex flex-col min-h-0 overflow-hidden h-full animate-[fadeInUp_0.4s_ease-out]">
-      <div class="flex justify-between items-center mb-4 px-5 py-4 bg-[rgba(26,34,53,0.6)] rounded-2xl border border-white/10 backdrop-blur-[10px]">
+    <div v-else class="flex-1 flex flex-col min-h-0 overflow-hidden h-full animate-[fadeInUp_0.4s_ease-out] mt-5">
+      <!-- 标题区域 -->
+      <div
+        class="flex justify-between items-center mb-6 px-6 py-4 bg-[rgba(26,34,53,0.6)] rounded-2xl border border-white/10 backdrop-blur-[10px]">
         <h2 class="m-0 text-xl font-semibold text-white">代币列表</h2>
-        <div class="flex items-center gap-2">
-          <span class="px-3 py-1.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] rounded-full border border-[rgba(20,241,149,0.2)]">共 {{ tokens.length }} 个代币</span>
+        <div class="flex items-center gap-3">
+          <span
+            class="px-3 py-1.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] rounded-full border border-[rgba(20,241,149,0.2)]">共
+            {{ tokens.length }} 个代币</span>
+          <a-button :loading="loading" @click="refreshBalance" size="default"
+            class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+            <template #icon>
+              <ReloadOutlined />
+            </template>
+            刷新余额
+          </a-button>
         </div>
       </div>
 
       <!-- 调试信息面板 -->
-      <div v-if="debugInfo.lastError" class="mb-6 p-4 bg-[rgba(255,193,7,0.1)] border border-[rgba(255,193,7,0.3)] rounded-lg">
+      <div v-if="debugInfo.lastError"
+        class="mb-6 p-4 bg-[rgba(255,193,7,0.1)] border border-[rgba(255,193,7,0.3)] rounded-lg">
         <div class="flex justify-between items-center mb-3">
           <span class="text-base font-semibold text-[#ffc107]">⚠️ 调试信息</span>
           <a-button size="small" @click="debugInfo.lastError = null">关闭</a-button>
@@ -497,7 +517,8 @@ defineOptions({
           </div>
           <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
             <span class="text-[13px] text-white/60 font-medium min-w-[100px]">最后尝试:</span>
-            <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.lastFetchTime?.toLocaleString() }}</span>
+            <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.lastFetchTime?.toLocaleString()
+            }}</span>
           </div>
           <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
             <span class="text-[13px] text-white/60 font-medium min-w-[100px]">钱包公钥:</span>
@@ -515,100 +536,93 @@ defineOptions({
         </div>
       </div>
 
-      <div class="flex-1 min-h-0 overflow-y-auto mb-4 pr-2">
-        <div class="grid grid-cols-2 gap-6">
-          <div
-            v-for="token in paginatedTokens"
-            :key="token.mint"
-            class="bg-gradient-to-br from-[rgba(26,34,53,0.8)] to-[rgba(11,19,43,0.8)] border border-white/10 rounded-2xl p-5 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] relative overflow-hidden w-full box-border flex flex-col gap-4 hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]"
-          >
-          <!-- 代币Logo和信息 -->
-          <div class="flex items-start gap-4">
-            <div class="w-14 h-14 shrink-0 rounded-xl overflow-hidden bg-white/5 flex items-center justify-center border border-white/10">
-              <img
-                v-if="token.logoURI"
-                :src="token.logoURI"
-                :alt="token.symbol || 'Token'"
-                class="w-full h-full object-cover"
-                @error="(e: any) => e.target.style.display = 'none'"
-              />
-              <div v-else class="w-full h-full flex items-center justify-center bg-gradient-solana text-white font-bold text-lg">
-                {{ token.symbol?.slice(0, 2) || 'TK' }}
-              </div>
-            </div>
-
-            <div class="flex-1 min-w-0 overflow-hidden">
-              <div class="flex items-center gap-2 mb-2">
-                <h3 class="m-0 text-lg font-semibold text-white truncate">{{ token.name || 'Unknown Token' }}</h3>
-                <a-tag class="px-2 py-0.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] border border-[rgba(20,241,149,0.2)] rounded-full">{{ token.symbol || 'UNKNOWN' }}</a-tag>
-              </div>
-              <div class="space-y-2">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-white/60 font-medium min-w-[40px]">Mint</span>
-                  <div class="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0" @click="copyAddress(token.mint, 'Mint地址')">
-                    <code class="text-xs text-white/80 font-mono truncate flex-1">{{ formatAddress(token.mint) }}</code>
-                    <span class="text-xs shrink-0">📋</span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-white/60 font-medium min-w-[40px]">ATA</span>
-                  <div class="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0" @click="copyAddress(token.ata, 'ATA地址')">
-                    <code class="text-xs text-white/80 font-mono truncate flex-1">{{ formatAddress(token.ata) }}</code>
-                    <span class="text-xs shrink-0">📋</span>
-                  </div>
+      <div class="flex-1 min-h-0 overflow-y-auto pr-2 px-2">
+        <div class="grid grid-cols-4 gap-4">
+          <div v-for="token in paginatedTokens" :key="token.mint"
+            class="token-card bg-gradient-to-br from-[rgba(26,34,53,0.8)] to-[rgba(11,19,43,0.8)] border border-white/10 rounded-xl p-4 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] relative overflow-hidden w-full box-border flex flex-col gap-3 hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]">
+            <!-- 代币Logo和信息 -->
+            <div class="flex items-start gap-3">
+              <div
+                class="w-12 h-12 shrink-0 rounded-full overflow-hidden bg-white/5 flex items-center justify-center border border-white/10">
+                <img v-if="token.logoURI" :src="token.logoURI" :alt="token.symbol || 'Token'"
+                  class="w-full h-full object-cover" @error="(e: any) => e.target.style.display = 'none'" />
+                <div v-else
+                  class="w-full h-full flex items-center justify-center bg-gradient-solana text-white font-bold text-sm">
+                  {{ token.symbol?.slice(0, 2) || 'TK' }}
                 </div>
               </div>
-            </div>
-          </div>
 
-          <!-- 代币余额 -->
-          <div class="px-4 py-3 bg-white/5 rounded-xl border border-white/10">
-            <div class="text-xs text-white/60 mb-1 font-medium">持有数量</div>
-            <div class="text-xl font-bold text-white mb-1 break-words">
-              {{ token.balance.toFixed(token.decimals) }}
+              <div class="flex-1 min-w-0 overflow-hidden">
+                <div class="flex items-center gap-2 mb-2">
+                  <h3 class="m-0 text-base font-semibold text-white truncate">{{ token.name || 'Unknown Token' }}</h3>
+                  <a-tag
+                    class="px-2 py-0.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] border border-[rgba(20,241,149,0.2)] rounded-full">{{
+                      token.symbol || 'UNKNOWN' }}</a-tag>
+                </div>
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-white/60 font-medium min-w-[35px]">数量</span>
+                    <div
+                      class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0">
+                      <div class="text-[11px] text-white/80 font-mono truncate flex-1">
+                        {{ token.balance.toFixed(token.decimals) }}
+                      </div> 
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-white/60 font-medium min-w-[35px]">Mint</span>
+                    <div
+                      class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0"
+                      @click="copyAddress(token.mint, 'Mint地址')">
+                      <code class="text-[11px] text-white/80 font-mono truncate flex-1">{{ formatAddress(token.mint)
+                      }}</code>
+                      <CopyOutlined class="text-[11px] shrink-0 text-white/60" />
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-white/60 font-medium min-w-[35px]">ATA</span>
+                    <div
+                      class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0"
+                      @click="copyAddress(token.ata, 'ATA地址')">
+                      <code class="text-[11px] text-white/80 font-mono truncate flex-1">{{ formatAddress(token.ata)
+                      }}</code>
+                      <CopyOutlined class="text-[11px] shrink-0 text-white/60" />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="text-sm text-white/80 font-medium">{{ token.symbol || 'Tokens' }}</div>
-          </div>
 
-          <!-- 代币操作 -->
-          <div class="mt-auto">
-            <a-space direction="vertical" :size="8" style="width: 100%">
-              <a-button
-                type="primary"
-                block
-                size="large"
-                @click="handleTransfer(token)"
-              >
-                <template #icon>📤</template>
-                转账
-              </a-button>
-              <a-button
-                block
-                size="large"
-                class="bg-white/10 border border-white/20 text-white hover:bg-white/15 hover:border-white/30"
-                @click="viewOnSolscan(token.mint)"
-              >
-                <template #icon>🔍</template>
-                在 Solscan 查看
-              </a-button>
-            </a-space>
-          </div>
+            <!-- 代币操作按钮 -->
+            <div class="mt-auto">
+              <div class="flex gap-2">
+                <button
+                  @click="handleTransfer(token)"
+                  class="flex items-center justify-center flex-1 px-3 py-1.5 text-xs font-medium rounded-full bg-[rgba(20,241,149,0.1)] border border-[rgba(20,241,149,0.2)] text-solana-green transition-all duration-300 ease-in-out hover:bg-[rgba(20,241,149,0.15)] hover:border-[rgba(20,241,149,0.3)] cursor-pointer"
+                >
+                  <span class="mr-1">📤</span>
+                  转账
+                </button>
+                <button
+                  @click="viewOnSolscan(token.mint)"
+                  class="flex items-center justify-center flex-1 px-3 py-1.5 text-xs font-medium rounded-full bg-[rgba(153,69,255,0.1)] border border-[rgba(153,69,255,0.2)] text-white transition-all duration-300 ease-in-out hover:bg-[rgba(153,69,255,0.15)] hover:border-[rgba(153,69,255,0.3)] cursor-pointer"
+                >
+                  <span class="mr-1">🔍</span>
+                  Solscan
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- 分页组件 -->
       <div v-if="tokens.length > pageSize" class="mt-4 flex justify-center">
-        <a-pagination
-          v-model:current="currentPage"
-          :total="tokens.length"
-          :page-size="pageSize"
-          :show-size-changer="false"
-          :show-quick-jumper="true"
+        <a-pagination v-model:current="currentPage" :total="tokens.length" :page-size="pageSize"
+          :show-size-changer="false" :show-quick-jumper="true"
           :show-total="(total: number, range: [number, number]) => `共 ${total} 个代币，第 ${range[0]}-${range[1]} 个`"
           @change="handlePageChange"
-          class="[&_.ant-pagination-item]:bg-white/10 [&_.ant-pagination-item]:border-white/20 [&_.ant-pagination-item]:text-white [&_.ant-pagination-item:hover]:border-solana-green [&_.ant-pagination-item-active]:bg-solana-green [&_.ant-pagination-item-active]:border-solana-green [&_.ant-pagination-prev]:text-white [&_.ant-pagination-next]:text-white [&_.ant-pagination-jump-prev]:text-white [&_.ant-pagination-jump-next]:text-white"
-        />
+          class="[&_.ant-pagination-item]:bg-white/10 [&_.ant-pagination-item]:border-white/20 [&_.ant-pagination-item]:text-white [&_.ant-pagination-item:hover]:border-solana-green [&_.ant-pagination-item-active]:bg-solana-green [&_.ant-pagination-item-active]:border-solana-green [&_.ant-pagination-prev]:text-white [&_.ant-pagination-next]:text-white [&_.ant-pagination-jump-prev]:text-white [&_.ant-pagination-jump-next]:text-white" />
       </div>
     </div>
   </div>
@@ -620,6 +634,7 @@ defineOptions({
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -631,6 +646,7 @@ defineOptions({
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -676,9 +692,6 @@ defineOptions({
   opacity: 1;
 }
 
-.sol-symbol {
-  filter: drop-shadow(0 0 10px rgba(20, 241, 149, 0.6));
-}
 
 /* Empty 组件样式 */
 :deep(.ant-empty) {

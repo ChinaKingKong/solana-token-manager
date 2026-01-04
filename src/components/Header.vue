@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { message } from 'ant-design-vue';
 import Wallet from './wallet.vue';
+import { useWallet } from '../composables/useWallet';
+import type { NetworkType } from '../config/rpc';
 import {
   HomeOutlined,
   PlusOutlined,
@@ -13,6 +16,7 @@ import {
   HistoryOutlined,
   ToolOutlined,
   RightOutlined,
+  GlobalOutlined,
 } from '@ant-design/icons-vue';
 
 // 定义菜单项配置
@@ -46,6 +50,33 @@ const currentPage = computed(() => {
   const page = pageConfigs.find(page => page.key === props.activeKey) || pageConfigs[0];
   return page;
 });
+
+// 钱包上下文
+const { network, switchNetwork } = useWallet();
+
+// 网络选项
+const networkOptions = [
+  { label: '主网', value: 'mainnet' as NetworkType },
+  { label: '测试网', value: 'devnet' as NetworkType },
+];
+
+// 当前网络显示文本
+const currentNetworkLabel = computed(() => {
+  const currentNetwork = network.value;
+  return networkOptions.find(opt => opt.value === currentNetwork)?.label || '主网';
+});
+
+// 切换网络
+const handleNetworkChange = (newNetwork: NetworkType) => {
+  if (network.value === newNetwork) return;
+  
+  try {
+    switchNetwork(newNetwork);
+    message.success(`已切换到${networkOptions.find(opt => opt.value === newNetwork)?.label}`);
+  } catch (error) {
+    message.error('切换网络失败');
+  }
+};
 </script>
 
 <template>
@@ -63,6 +94,24 @@ const currentPage = computed(() => {
 
         <!-- 右侧钱包区域 -->
         <div class="header-right">
+          <!-- 网络切换按钮 -->
+          <a-dropdown trigger="click" placement="bottomRight">
+            <a-button class="network-switch-btn">
+              <template #icon><GlobalOutlined /></template>
+              {{ currentNetworkLabel }}
+            </a-button>
+            <template #overlay>
+              <a-menu @click="({ key }) => handleNetworkChange(key as NetworkType)">
+                <a-menu-item 
+                  v-for="option in networkOptions" 
+                  :key="option.value"
+                  :class="{ 'ant-menu-item-selected': network.value === option.value }"
+                >
+                  {{ option.label }}
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
           <Wallet />
         </div>
       </div>
@@ -153,8 +202,31 @@ const currentPage = computed(() => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
+}
+
+/* 网络切换按钮 */
+.network-switch-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 1px;
+}
+
+.network-switch-btn:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
 }
 
 /* 底部分割线 */

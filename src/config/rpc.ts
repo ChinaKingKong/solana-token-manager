@@ -12,7 +12,7 @@ export const RPC_ENDPOINTS = {
 export type NetworkType = keyof typeof RPC_ENDPOINTS;
 
 // 默认网络
-export const DEFAULT_NETWORK: NetworkType = 'devnet';
+export const DEFAULT_NETWORK: NetworkType = 'mainnet';
 
 /**
  * 获取指定网络的RPC端点

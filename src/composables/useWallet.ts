@@ -25,7 +25,8 @@ export interface WalletContext {
   supportedWallets: any[];
   connection: ReturnType<typeof useWalletProvider>['connection'];
   endpoint: string;
-  network: NetworkType;
+  network: ReturnType<typeof useWalletProvider>['network'];
+  switchNetwork: (network: NetworkType) => void;
   connectWallet: (walletAdapter: any) => Promise<boolean>;
   disconnectWallet: () => Promise<void>;
   autoConnect: () => Promise<boolean>;
@@ -45,10 +46,36 @@ export function useWalletProvider() {
   const disconnecting = ref(false);
   const balance = ref(0);
 
-  // 连接配置
-  const network: NetworkType = DEFAULT_NETWORK;
-  const endpoint = getRpcEndpoint(network);
-  const connection = ref(new Connection(endpoint, 'confirmed'));
+  // 连接配置 - 从 localStorage 读取或使用默认值
+  const getStoredNetwork = (): NetworkType => {
+    const stored = localStorage.getItem('solana-network');
+    if (stored && (stored === 'mainnet' || stored === 'devnet')) {
+      return stored as NetworkType;
+    }
+    return DEFAULT_NETWORK;
+  };
+
+  const network = ref<NetworkType>(getStoredNetwork());
+  const endpoint = computed(() => getRpcEndpoint(network.value));
+  
+  // 将 connection 改为 computed，使其自动响应网络变化
+  const connection = computed(() => {
+    return new Connection(endpoint.value, 'confirmed');
+  });
+
+  // 切换网络
+  const switchNetwork = (newNetwork: NetworkType) => {
+    if (network.value === newNetwork) return;
+    
+    network.value = newNetwork;
+    localStorage.setItem('solana-network', newNetwork);
+    
+    // connection 是 computed，会自动更新，这里只需要触发响应式更新
+    // 如果已连接钱包，重新获取余额
+    if (connected.value && publicKey.value) {
+      fetchBalance();
+    }
+  };
 
   // 支持的钱包列表
   const supportedWallets = [
@@ -193,6 +220,7 @@ export function useWalletProvider() {
     connection,
     endpoint,
     network,
+    switchNetwork,
     connectWallet,
     disconnectWallet,
     autoConnect,
