@@ -228,6 +228,57 @@ npm run build
 npm run preview
 ```
 
+## Deployment
+
+### Deploy to Vercel
+
+The project is pre-configured for Vercel deployment. For detailed deployment instructions, please refer to [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+**Quick Start:**
+
+1. **Push project to GitHub**
+   ```bash
+   git add .
+   git commit -m "Ready for Vercel deployment"
+   git push origin main
+   ```
+
+2. **Import project in Vercel**
+   - Visit [https://vercel.com/new](https://vercel.com/new)
+   - Select your GitHub repository
+   - Vercel will automatically detect Vite configuration
+   - Click **Deploy**
+
+3. **Configure environment variables** (Important!)
+   - Go to project **Settings** → **Environment Variables**
+   - Add the following variables (see `.env.example` for reference):
+     - `VITE_SOLANA_MAINNET_RPC`
+     - `VITE_SOLANA_DEVNET_RPC`
+     - `VITE_PINATA_API_KEY` (optional)
+     - `VITE_PINATA_API_SECRET_KEY` (optional)
+     - `VITE_PINATA_JWT` (optional)
+   - **Important**: All variables must start with `VITE_` prefix
+   - After adding variables, trigger a **Redeploy**
+
+4. **Done!**
+   - Your app will be available at `https://your-project.vercel.app`
+   - Vercel will automatically deploy on every push to the main branch
+
+**Alternative: Deploy using Vercel CLI**
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Login to Vercel
+vercel login
+
+# Deploy to production
+vercel --prod
+```
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for more detailed information.
+
 ## Usage Instructions
 
 ### Connect Wallet

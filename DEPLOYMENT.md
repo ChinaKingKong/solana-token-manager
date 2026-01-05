@@ -85,8 +85,10 @@ vercel domains add your-domain.com
 - [x] 项目构建成功（`dist/` 文件夹已生成）
 - [x] `vercel.json` 配置文件已创建
 - [x] `.vercelignore` 文件已创建（避免上传不必要的文件）
-- [ ] Vercel 账户已登录
-- [ ] 选择部署方式
+- [x] `.env.example` 模板文件已创建
+- [ ] 项目已推送到 GitHub
+- [ ] 在 Vercel 添加环境变量
+- [ ] 选择部署方式并完成部署
 
 ---
 
@@ -120,12 +122,51 @@ vercel domains add your-domain.com
 
 ---
 
-## 📝 环境变量（如需要）
+## 📝 环境变量配置（必需）
 
-如果项目需要环境变量，在 Vercel 控制台的 Settings > Environment Variables 中添加：
-- `VITE_SOLANA_RPC_URL`
-- `VITE_SOLANA_NETWORK`
-- 其他自定义变量
+项目依赖环境变量才能正常运行。参照 `.env.example` 文件中的变量列表。
+
+### 在 Vercel 控制台添加环境变量：
+
+1. **进入项目设置**
+   - 登录 Vercel 控制台
+   - 选择你的项目
+   - 点击顶部的 **Settings** 标签
+
+2. **添加环境变量**
+   - 在左侧菜单选择 **Environment Variables**
+   - 点击 **Add New** 按钮
+   - 逐个添加以下变量：
+
+   ```env
+   # 必需 - Solana RPC 端点
+   VITE_SOLANA_MAINNET_RPC=https://solana-mainnet.g.alchemy.com/v2/YOUR_API_KEY
+   VITE_SOLANA_DEVNET_RPC=https://solana-devnet.g.alchemy.com/v2/YOUR_API_KEY
+
+   # 可选 - IPFS 上传功能（Pinata）
+   VITE_PINATA_API_KEY=your_api_key
+   VITE_PINATA_API_SECRET_KEY=your_secret_key
+   VITE_PINATA_JWT=your_jwt_token
+   ```
+
+3. **重要提示**
+   - ⚠️ **必须以 `VITE_` 开头**：Vite 只能识别以 `VITE_` 开头的环境变量
+   - 🔒 **不要提交实际的 .env 文件**：已添加到 `.gitignore`
+   - ✅ **只提交 .env.example**：作为变量名称的模板
+   - 🔄 **修改后需要重新部署**：环境变量更新后，需要触发新的部署才能生效
+
+4. **环境选择**
+   - 选择应用到哪些环境：
+     - `Production` - 生产环境
+     - `Preview` - 预览环境
+     - `Development` - 开发环境
+   - 建议全选，以便在所有环境中使用
+
+5. **保存并重新部署**
+   - 添加完所有变量后，点击 **Save**
+   - 进入 **Deployments** 标签
+   - 点击最新部署右侧的 **...** 菜单
+   - 选择 **Redeploy** 以应用新的环境变量
 
 ---
 
