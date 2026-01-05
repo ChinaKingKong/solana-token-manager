@@ -8,6 +8,7 @@ import {
   getAccount,
   createFreezeAccountInstruction,
   createThawAccountInstruction,
+  getAssociatedTokenAddress,
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import {
@@ -35,7 +36,8 @@ const network = walletContext.network;
 
 // 代币Mint地址
 const tokenMintAddress = ref('');
-const targetAccountAddress = ref('');
+const targetWalletAddress = ref(''); // 目标钱包地址（不再是 ATA 地址）
+const calculatedATAAddress = ref(''); // 计算出的 ATA 地址
 
 // 状态
 const processing = ref(false);
@@ -75,11 +77,11 @@ const isValidSolanaAddress = (address: string): boolean => {
 // 验证函数
 const isFormValid = computed(() => {
   const hasMintAddress = tokenMintAddress.value.trim() !== '';
-  const hasAccountAddress = targetAccountAddress.value.trim() !== '' && isValidSolanaAddress(targetAccountAddress.value);
+  const hasWalletAddress = targetWalletAddress.value.trim() !== '' && isValidSolanaAddress(targetWalletAddress.value);
   const isConnected = walletState.value?.connected && walletState.value?.publicKey !== null;
   const hasAuthority = hasFreezeAuthority.value;
   
-  return hasMintAddress && hasAccountAddress && isConnected && hasAuthority && accountInfo.value !== null;
+  return hasMintAddress && hasWalletAddress && isConnected && hasAuthority && accountInfo.value !== null;
 });
 
 // 格式化地址
@@ -124,8 +126,8 @@ const fetchTokenInfo = async () => {
       hasFreezeAuthority.value = false;
     }
 
-    // 如果已有账户地址，自动获取账户信息
-    if (targetAccountAddress.value.trim()) {
+    // 如果已有钱包地址，自动获取账户信息
+    if (targetWalletAddress.value.trim()) {
       await fetchAccountInfo();
     }
   } catch (error: any) {
@@ -137,49 +139,64 @@ const fetchTokenInfo = async () => {
   }
 };
 
-// 获取账户信息
+// 获取账户信息（根据钱包地址和 mint 地址计算 ATA 地址）
 const fetchAccountInfo = async () => {
-  if (!targetAccountAddress.value.trim() || !tokenMintAddress.value.trim()) {
+  if (!targetWalletAddress.value.trim() || !tokenMintAddress.value.trim()) {
     return;
   }
 
-  if (!isValidSolanaAddress(targetAccountAddress.value)) {
+  if (!isValidSolanaAddress(targetWalletAddress.value)) {
     message.error(t('freezeManage.addressInvalid'));
     return;
   }
 
   loadingInfo.value = true;
   try {
-    const accountPubkey = new PublicKey(targetAccountAddress.value);
-    const accountData = await getAccount(connection.value, accountPubkey);
+    const walletPubkey = new PublicKey(targetWalletAddress.value);
+    const mintPubkey = new PublicKey(tokenMintAddress.value);
+    
+    // 计算关联代币账户（ATA）地址
+    const ataAddress = await getAssociatedTokenAddress(mintPubkey, walletPubkey);
+    calculatedATAAddress.value = ataAddress.toString();
 
-    // 验证账户是否属于该代币
-    if (accountData.mint.toString() !== tokenMintAddress.value) {
-      message.error(t('freezeManage.freezeFailed'));
-      accountInfo.value = null;
-      return;
+    // 尝试获取账户信息
+    try {
+      const accountData = await getAccount(connection.value, ataAddress);
+
+      // 验证账户是否属于该代币
+      if (accountData.mint.toString() !== tokenMintAddress.value) {
+        message.error(t('freezeManage.freezeFailed'));
+        accountInfo.value = null;
+        return;
+      }
+
+      accountInfo.value = {
+        address: accountData.address.toString(),
+        mint: accountData.mint.toString(),
+        owner: accountData.owner.toString(),
+        amount: accountData.amount.toString(),
+        isFrozen: accountData.isFrozen,
+      };
+
+      isFrozen.value = accountData.isFrozen;
+
+      // 自动设置操作类型
+      operationType.value = accountData.isFrozen ? 'thaw' : 'freeze';
+    } catch (accountError: any) {
+      // 如果账户不存在，显示提示但不报错（这是正常情况，账户可能还未创建）
+      if (accountError.message?.includes('InvalidAccountData') || accountError.message?.includes('AccountNotFound')) {
+        accountInfo.value = null;
+        isFrozen.value = false;
+        // 不显示错误，因为账户可能还未创建
+      } else {
+        throw accountError;
+      }
     }
-
-    accountInfo.value = {
-      address: accountData.address.toString(),
-      mint: accountData.mint.toString(),
-      owner: accountData.owner.toString(),
-      amount: accountData.amount.toString(),
-      isFrozen: accountData.isFrozen,
-    };
-
-    isFrozen.value = accountData.isFrozen;
-
-    // 自动设置操作类型
-    operationType.value = accountData.isFrozen ? 'thaw' : 'freeze';
   } catch (error: any) {
-    if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
-      message.error(t('freezeManage.freezeFailed'));
-    } else {
-      message.error(`${t('common.error')}: ${error.message || t('common.error')}`);
-    }
+    message.error(`${t('common.error')}: ${error.message || t('common.error')}`);
     accountInfo.value = null;
     isFrozen.value = false;
+    calculatedATAAddress.value = '';
   } finally {
     loadingInfo.value = false;
   }
@@ -188,7 +205,7 @@ const fetchAccountInfo = async () => {
 // 执行冻结或解冻操作
 const handleOperation = async () => {
   if (!isFormValid.value) {
-    message.error(t('freezeManage.accountAddressRequired'));
+    message.error(t('freezeManage.walletAddressRequired'));
     return;
   }
 
@@ -205,9 +222,9 @@ const handleOperation = async () => {
   // 二次确认
   const actionText = operationType.value === 'freeze' ? t('freezeManage.freeze') : t('freezeManage.thaw');
   Modal.confirm({
-    title: `${t('common.confirm')}${actionText}${t('freezeManage.accountAddress')}`,
-    content: `${t('common.confirm')}${actionText}${t('freezeManage.accountAddress')}？`,
-    okText: `${t('common.confirm')}${actionText}`,
+    title: `${t('common.confirm')}${actionText}`,
+    content: `${t('common.confirm')}${actionText}${t('freezeManage.walletAddress')}？`,
+    okText: t('common.confirm'),
     okType: operationType.value === 'freeze' ? 'danger' : 'primary',
     cancelText: t('common.cancel'),
     onOk: async () => {
@@ -243,7 +260,7 @@ const executeOperation = async () => {
     }
 
     const mintPubkey = new PublicKey(tokenMintAddress.value);
-    const targetAccountPubkey = new PublicKey(targetAccountAddress.value);
+    const targetWalletPubkey = new PublicKey(targetWalletAddress.value);
     const ownerPubkey = walletState.value.publicKey!;
     const wallet = walletState.value.wallet;
     const conn = connection.value;
@@ -266,9 +283,13 @@ const executeOperation = async () => {
       return;
     }
 
+    // 计算关联代币账户（ATA）地址
+    const ataAddress = await getAssociatedTokenAddress(mintPubkey, targetWalletPubkey);
+    calculatedATAAddress.value = ataAddress.toString();
+
     // 验证账户状态（确保账户存在且状态正确）
     try {
-      const accountData = await getAccount(conn, targetAccountPubkey);
+      const accountData = await getAccount(conn, ataAddress);
       
       // 验证账户是否属于该代币
       if (accountData.mint.toString() !== mintPubkey.toString()) {
@@ -284,7 +305,7 @@ const executeOperation = async () => {
       }
     } catch (error: any) {
       if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
-        throw new Error(t('freezeManage.freezeFailed'));
+        throw new Error(t('freezeManage.accountNotFound'));
       }
       throw error;
     }
@@ -296,7 +317,7 @@ const executeOperation = async () => {
       // 冻结账户
       transaction.add(
         createFreezeAccountInstruction(
-          targetAccountPubkey, // account (代币账户)
+          ataAddress, // account (代币账户 ATA)
           mintPubkey, // mint (代币mint地址)
           ownerPubkey, // freezeAuthority (冻结权限持有者)
           undefined, // multiSigners (多签账户，单签时传 undefined)
@@ -307,7 +328,7 @@ const executeOperation = async () => {
       // 解冻账户
       transaction.add(
         createThawAccountInstruction(
-          targetAccountPubkey, // account (代币账户)
+          ataAddress, // account (代币账户 ATA)
           mintPubkey, // mint (代币mint地址)
           ownerPubkey, // freezeAuthority (冻结权限持有者)
           undefined, // multiSigners (多签账户，单签时传 undefined)
@@ -422,7 +443,8 @@ const resetForm = () => {
   operationSuccess.value = false;
   operationTransactionSignature.value = '';
   tokenMintAddress.value = '';
-  targetAccountAddress.value = '';
+  targetWalletAddress.value = '';
+  calculatedATAAddress.value = '';
   tokenInfo.value = null;
   accountInfo.value = null;
   isFrozen.value = false;
@@ -440,13 +462,14 @@ watch(() => tokenMintAddress.value, (newValue) => {
   }
 });
 
-// 监听账户地址变化
-watch(() => targetAccountAddress.value, (newValue) => {
+// 监听钱包地址变化
+watch(() => targetWalletAddress.value, (newValue) => {
   if (newValue && newValue.trim() && tokenMintAddress.value.trim()) {
     fetchAccountInfo();
   } else {
     accountInfo.value = null;
     isFrozen.value = false;
+    calculatedATAAddress.value = '';
   }
 });
 
@@ -637,24 +660,40 @@ defineOptions({
             </div>
       </div>
 
-          <!-- 目标账户地址 -->
+          <!-- 目标钱包地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              {{ t('freezeManage.targetAccountAddress') }} <span class="text-red-400">*</span>
+              {{ t('freezeManage.targetWalletAddress') }} <span class="text-red-400">*</span>
             </label>
         <a-input
-          v-model:value="targetAccountAddress"
-              :placeholder="t('freezeManage.targetAccountAddressPlaceholder')"
+          v-model:value="targetWalletAddress"
+              :placeholder="t('freezeManage.targetWalletAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{
-                '!border-solana-green': targetAccountAddress && isValidSolanaAddress(targetAccountAddress),
-                '!border-red-500': targetAccountAddress && !isValidSolanaAddress(targetAccountAddress)
+                '!border-solana-green': targetWalletAddress && isValidSolanaAddress(targetWalletAddress),
+                '!border-red-500': targetWalletAddress && !isValidSolanaAddress(targetWalletAddress)
               }"
             />
-            <div class="mt-1.5 text-xs text-white/50">{{ t('freezeManage.targetAccountAddressDesc') }}</div>
-            <div v-if="targetAccountAddress && !isValidSolanaAddress(targetAccountAddress)" class="mt-1.5 text-xs text-red-400">
+            <div class="mt-1.5 text-xs text-white/50">{{ t('freezeManage.targetWalletAddressDesc') }}</div>
+            <div v-if="targetWalletAddress && !isValidSolanaAddress(targetWalletAddress)" class="mt-1.5 text-xs text-red-400">
               {{ t('freezeManage.addressInvalid') }}
+            </div>
+            <!-- 显示计算出的 ATA 地址 -->
+            <div v-if="calculatedATAAddress && targetWalletAddress && isValidSolanaAddress(targetWalletAddress)" class="mt-2 p-3 bg-white/5 rounded-lg border border-white/10">
+              <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.calculatedATAAddress') }}</div>
+              <div class="flex items-center gap-2">
+                <code class="text-xs text-white/80 font-mono flex-1 break-all">{{ calculatedATAAddress }}</code>
+                <a-button
+                  @click="copyAddress(calculatedATAAddress)"
+                  type="text"
+                  size="small"
+                  class="p-0 h-auto text-white/50 hover:text-white flex-shrink-0">
+                  <template #icon>
+                    <CopyOutlined />
+                  </template>
+                </a-button>
+              </div>
             </div>
           </div>
 

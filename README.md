@@ -51,6 +51,7 @@ npm --version   # Should be >= 9.0.0
   - Mint address input with saved addresses dropdown
 - **Freeze Management**：Freeze and thaw token accounts (requires freeze authority)
   - Mint address input with saved addresses dropdown
+  - Freeze by wallet address (system automatically calculates ATA address)
   - Permission status display
 
 ### IPFS and Metadata
@@ -272,6 +273,24 @@ npm run preview
 3. Enter recipient address and transfer amount
 4. Click the "Transfer Token" button
 
+### Burn Token
+
+1. Go to the "Burn Token" page
+2. Enter the token Mint address
+3. Enter the burn amount
+4. Click the "Burn Token" button
+5. Confirm the transaction in your wallet
+
+### Freeze Management
+
+1. Go to the "Freeze Management" page
+2. Enter the token Mint address
+3. Enter the target wallet address (system will automatically calculate the ATA address)
+4. Select operation type (freeze or thaw)
+5. Click the operation button
+
+**Note**: The system automatically calculates the Associated Token Account (ATA) address based on the wallet address and mint address, so you only need to enter the wallet address.
+
 ### IPFS Upload
 
 1. Go to the "IPFS Upload" page
@@ -316,6 +335,7 @@ Reference Documentation: [Pinata Quickstart](https://docs.pinata.cloud/quickstar
 - **Production Environment**：Pinata API keys should be handled through backend services to avoid exposure in the frontend
 - **Transaction Fees**：All transaction operations require payment of Solana network fees (SOL)
 - **Permission Requirements**：Freeze/thaw operations require freeze authority for the token
+- **Freeze Management**：When freezing/thawing, enter the wallet address instead of the ATA address. The system will automatically calculate the ATA address
 - **Irreversible Operations**：Burning tokens is an irreversible operation, please operate with caution
 - **Testing Recommendations**：It is recommended to test functions on the testnet first, and then operate on the mainnet after confirmation
 
