@@ -4,6 +4,8 @@
 
 一个基于 Vue 3、TypeScript 和 Solana 区块链的代币管理系统，提供完整的 Solana SPL 代币管理功能。
 
+**🌐 在线演示**: [https://solana-token-manager-kappa.vercel.app/](https://solana-token-manager-kappa.vercel.app/)
+
 ![代币列表Demo](/src/assets/Demo1.jpg) 
 ![交易历史Demo](/src/assets/Demo6.jpg)
 

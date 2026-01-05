@@ -4,6 +4,8 @@
 
 A comprehensive Solana SPL token management system built with Vue 3, TypeScript, and Solana blockchain.
 
+**🌐 Live Demo**: [https://solana-token-manager-kappa.vercel.app/](https://solana-token-manager-kappa.vercel.app/)
+
 ![Token List Demo](/src/assets/Demo_en_1.jpg) 
 ![Transaction History Demo](/src/assets/Demo_en_2.jpg)
 ![Transaction History Demo](/src/assets/Demo_en_3.jpg)
