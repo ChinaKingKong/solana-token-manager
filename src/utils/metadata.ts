@@ -5,6 +5,11 @@ import {
   SYSVAR_RENT_PUBKEY,
   Connection,
 } from '@solana/web3.js';
+import {
+  createCreateMetadataAccountV3Instruction as createCreateMetadataAccountV3InstructionSDK,
+  TOKEN_METADATA_PROGRAM_ID as SDK_TOKEN_METADATA_PROGRAM_ID,
+  DataV2,
+} from '@metaplex-foundation/mpl-token-metadata';
 
 // Metaplex Token Metadata Program ID
 // 注意：这个版本的库没有导出 TOKEN_METADATA_PROGRAM_ID，所以直接定义
@@ -33,17 +38,21 @@ function serializeString(str: string): Buffer {
   return Buffer.concat([lengthBuffer, strBuffer]);
 }
 
-// 创建更新元数据账户的指令（手动构建，确保格式正确）
-export function createUpdateMetadataAccountV2Instruction(
+// 创建更新元数据账户的指令 V2（手动构建，使用指令 ID 15）
+// 根据 Metaplex Token Metadata 程序，UpdateMetadataAccountV2 使用指令 ID 15
+export function createUpdateMetadataAccountV3Instruction(
   metadata: PublicKey,
   updateAuthority: PublicKey,
   data: {
     name?: string;
     symbol?: string;
     uri?: string;
+    sellerFeeBasisPoints?: number;
+    creators?: Array<{ address: PublicKey; verified: boolean; share: number }> | null;
   },
   newUpdateAuthority?: PublicKey,
-  primarySaleHappened?: boolean
+  primarySaleHappened?: boolean,
+  isMutable?: boolean
 ): TransactionInstruction {
   const keys = [
     { pubkey: metadata, isSigner: false, isWritable: true },
@@ -52,24 +61,49 @@ export function createUpdateMetadataAccountV2Instruction(
 
   const buffers: Buffer[] = [];
   
-  // 指令 ID: 1 (UpdateMetadataAccountV2)
-  buffers.push(Buffer.from([1]));
+  // 指令 ID: 15 (UpdateMetadataAccountV2)
+  // 根据 Metaplex SDK 源代码，UpdateMetadataAccountV2 使用指令 ID 15
+  buffers.push(Buffer.from([15]));
 
-  // data: Option<Data>
+  // data: Option<DataV2>
   if (data.name || data.symbol || data.uri) {
     buffers.push(Buffer.from([1])); // Some
     
-    // Data 结构
+    // DataV2 结构
     buffers.push(serializeString(data.name || ''));
     buffers.push(serializeString(data.symbol || ''));
     buffers.push(serializeString(data.uri || ''));
     
     // sellerFeeBasisPoints: u16 (little-endian)
     const sellerFeeBuffer = Buffer.alloc(2);
-    sellerFeeBuffer.writeUInt16LE(0, 0);
+    sellerFeeBuffer.writeUInt16LE(data.sellerFeeBasisPoints ?? 0, 0);
     buffers.push(sellerFeeBuffer);
     
-    // creators: Option<Vec<Creator>> = None
+    // creators: Option<Vec<Creator>>
+    if (data.creators !== undefined) {
+      if (data.creators === null || data.creators.length === 0) {
+        buffers.push(Buffer.from([0])); // None
+      } else {
+        buffers.push(Buffer.from([1])); // Some
+        // Vec length: u32
+        const lengthBuffer = Buffer.alloc(4);
+        lengthBuffer.writeUInt32LE(data.creators.length, 0);
+        buffers.push(lengthBuffer);
+        // Creator 结构
+        for (const creator of data.creators) {
+          buffers.push(creator.address.toBuffer());
+          buffers.push(Buffer.from([creator.verified ? 1 : 0]));
+          buffers.push(Buffer.from([creator.share]));
+        }
+      }
+    } else {
+      buffers.push(Buffer.from([0])); // None
+    }
+    
+    // collection: Option<Collection> = None
+    buffers.push(Buffer.from([0])); // None
+    
+    // uses: Option<Uses> = None
     buffers.push(Buffer.from([0])); // None
   } else {
     buffers.push(Buffer.from([0])); // None
@@ -92,14 +126,40 @@ export function createUpdateMetadataAccountV2Instruction(
   }
 
   // isMutable: Option<bool>
-  buffers.push(Buffer.from([1])); // Some
-  buffers.push(Buffer.from([1])); // true
+  if (isMutable !== undefined) {
+    buffers.push(Buffer.from([1])); // Some
+    buffers.push(Buffer.from([isMutable ? 1 : 0]));
+  } else {
+    buffers.push(Buffer.from([0])); // None
+  }
 
   return new TransactionInstruction({
     keys,
     programId: TOKEN_METADATA_PROGRAM_ID,
     data: Buffer.concat(buffers),
   });
+}
+
+// 保留 V2 函数以保持向后兼容，但内部调用 V3
+export function createUpdateMetadataAccountV2Instruction(
+  metadata: PublicKey,
+  updateAuthority: PublicKey,
+  data: {
+    name?: string;
+    symbol?: string;
+    uri?: string;
+  },
+  newUpdateAuthority?: PublicKey,
+  primarySaleHappened?: boolean
+): TransactionInstruction {
+  return createUpdateMetadataAccountV3Instruction(
+    metadata,
+    updateAuthority,
+    data,
+    newUpdateAuthority,
+    primarySaleHappened,
+    true // 默认保持可变
+  );
 }
 
 // 创建元数据账户的指令（手动构建，确保格式正确）
@@ -224,7 +284,6 @@ async function fetchMetadataFromURI(
       }
     } catch (error) {
       // 如果获取失败，忽略错误，继续使用链上的 name 和 symbol
-      console.warn(`Failed to fetch metadata from URI ${uri}:`, error);
     }
   }
 
@@ -281,20 +340,18 @@ export async function fetchOnChainMetadata(
         }
       }
     } catch (rpcError) {
-      console.warn(`[Metadata] RPC 获取失败，尝试直接获取: ${mint.toString()}`, rpcError);
+      // RPC 获取失败，尝试直接获取
     }
 
     // 回退到直接获取账户信息
     const accountInfo = await connection.getAccountInfo(metadataPDA);
 
     if (!accountInfo || !accountInfo.data) {
-      console.log(`[Metadata] 账户不存在: ${mint.toString()}`);
       return null;
     }
 
     // 检查账户所有者是否是 Metaplex Token Metadata 程序
     if (!accountInfo.owner.equals(TOKEN_METADATA_PROGRAM_ID)) {
-      console.log(`[Metadata] 账户所有者不匹配: ${mint.toString()}`);
       return null;
     }
 
@@ -302,7 +359,121 @@ export async function fetchOnChainMetadata(
     return await parseMetadataAccount(data, mint);
   } catch (error) {
     // 如果获取失败，返回 null
-    console.warn(`Failed to fetch on-chain metadata for mint ${mint.toString()}:`, error);
+    return null;
+  }
+}
+
+// 从 metadata 账户数据中获取 update authority
+export function getUpdateAuthorityFromMetadata(data: Buffer): PublicKey | null {
+  try {
+    if (data.length < 33) {
+      return null;
+    }
+    
+    // key (1 byte) + updateAuthority (32 bytes)
+    const updateAuthorityBytes = data.slice(1, 33);
+    return new PublicKey(updateAuthorityBytes);
+  } catch (error) {
+    return null;
+  }
+}
+
+// 从 metadata 账户数据中解析 DataV2 字段（包括 sellerFeeBasisPoints 和 creators）
+export function parseMetadataDataV2(data: Buffer): {
+  sellerFeeBasisPoints: number;
+  creators: Array<{ address: PublicKey; verified: boolean; share: number }> | null;
+} | null {
+  try {
+    if (data.length < 100) {
+      return null;
+    }
+
+    let offset = 0;
+    
+    // 跳过 key (1 byte)
+    const key = data[offset];
+    offset += 1;
+    
+    // 跳过 updateAuthority (32 bytes)
+    offset += 32;
+    
+    // 跳过 mint (32 bytes)
+    offset += 32;
+    
+    // 读取 data (Option<Data>)
+    // 注意：MetadataV1 (Key 4) 和 MetadataV2 (Key 6) 的格式可能不同
+    if (offset >= data.length) {
+      return null;
+    }
+    
+    const dataOption = data[offset];
+    
+    // MetadataV1 (Key 4) 可能直接包含 Data，而不是 Option<Data>
+    // 如果 dataOption 不是 1，可能是直接的数据结构
+    if (dataOption === 1) {
+      // 标准格式：Option<Data> = Some
+      offset += 1;
+    } else if (key === 4) {
+      // MetadataV1 可能直接是 Data 结构，不包含 Option 包装
+      // 不增加 offset，直接读取 Data
+    } else {
+      // 尝试直接读取，可能是其他格式
+      // 不增加 offset
+    }
+    
+    // 跳过 name, symbol, uri (需要动态解析)
+    // 使用 deserializeString 函数来正确解析
+    try {
+      const nameResult = deserializeString(data, offset);
+      offset = nameResult.newOffset;
+      
+      const symbolResult = deserializeString(data, offset);
+      offset = symbolResult.newOffset;
+      
+      const uriResult = deserializeString(data, offset);
+      offset = uriResult.newOffset;
+    } catch (error) {
+      return null;
+    }
+    
+    // sellerFeeBasisPoints: u16
+    if (offset + 2 > data.length) {
+      return null;
+    }
+    const sellerFeeBasisPoints = data.readUInt16LE(offset);
+    offset += 2;
+    
+    // creators: Option<Vec<Creator>>
+    if (offset >= data.length) {
+      return null;
+    }
+    const hasCreators = data[offset] === 1;
+    offset += 1;
+    
+    let creators: Array<{ address: PublicKey; verified: boolean; share: number }> | null = null;
+    if (hasCreators) {
+      if (offset + 4 > data.length) {
+        return null;
+      }
+      const creatorsLength = data.readUInt32LE(offset);
+      offset += 4;
+      creators = [];
+      for (let i = 0; i < creatorsLength; i++) {
+        if (offset + 34 > data.length) {
+          break;
+        }
+        const creatorAddress = new PublicKey(data.slice(offset, offset + 32));
+        offset += 32;
+        const verified = data[offset] === 1;
+        offset += 1;
+        const share = data[offset];
+        offset += 1;
+        creators.push({ address: creatorAddress, verified, share });
+      }
+    }
+    
+    return { sellerFeeBasisPoints, creators };
+  } catch (error) {
     return null;
   }
 }
@@ -310,10 +481,8 @@ export async function fetchOnChainMetadata(
 // 解析 metadata 账户数据
 async function parseMetadataAccount(data: Buffer, mint: PublicKey): Promise<TokenMetadata | null> {
   try {
-    
     // 如果数据太短，无法解析
     if (data.length < 100) {
-      console.log(`[Metadata] 数据太短: ${mint.toString()}, length: ${data.length}`);
       return null;
     }
 
@@ -321,19 +490,16 @@ async function parseMetadataAccount(data: Buffer, mint: PublicKey): Promise<Toke
 
     // 读取 key (1 byte) - 通常是 4 (MetadataV1) 或 6 (MetadataV2)
     const key = data[offset];
-    console.log(`[Metadata] Key: ${key}, Data length: ${data.length}`);
     offset += 1;
 
     // 跳过 updateAuthority (32 bytes)
     if (offset + 32 > data.length) {
-      console.log(`[Metadata] 数据不足，无法跳过 updateAuthority: ${mint.toString()}`);
       return null;
     }
     offset += 32;
 
     // 跳过 mint (32 bytes)
     if (offset + 32 > data.length) {
-      console.log(`[Metadata] 数据不足，无法跳过 mint: ${mint.toString()}`);
       return null;
     }
     offset += 32;
@@ -341,30 +507,18 @@ async function parseMetadataAccount(data: Buffer, mint: PublicKey): Promise<Toke
     // 读取 data (Option<Data>)
     // Option 序列化：Some = [1], None = [0]
     if (offset >= data.length) {
-      console.log(`[Metadata] 数据不足，无法读取 data option: ${mint.toString()}`);
       return null;
     }
     
-    // 添加详细的调试信息
     const dataOptionByte = data[offset];
-    console.log(`[Metadata] Offset: ${offset}, Data option byte: ${dataOptionByte}, Hex: 0x${dataOptionByte.toString(16)}`);
-    
-    // 打印前 100 个字节的十六进制，用于调试
-    const previewBytes = Array.from(data.slice(0, Math.min(100, data.length)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join(' ');
-    console.log(`[Metadata] 前100字节 (hex): ${previewBytes}`);
-    
     const hasData = data[offset] === 1;
     offset += 1;
 
     if (!hasData) {
-      console.log(`[Metadata] 没有 data 字段 (Option=None): ${mint.toString()}, offset: ${offset - 1}, byte: ${dataOptionByte}`);
       // 尝试检查是否是其他格式
       // 根据 Metaplex 源代码，某些版本可能直接包含 Data 结构，而不是 Option<Data>
       // 让我们尝试直接读取，看看是否有数据
       if (offset < data.length && data.length > 100) {
-        console.log(`[Metadata] 尝试直接读取 Data 结构（跳过 Option）...`);
         // 不增加 offset，直接尝试读取
         try {
           const nameResult = deserializeString(data, offset - 1);
@@ -375,26 +529,23 @@ async function parseMetadataAccount(data: Buffer, mint: PublicKey): Promise<Toke
           const uri = uriResult.value;
           
           if (name && symbol && uri) {
-            console.log(`[Metadata] 成功解析（跳过 Option）: ${mint.toString()}`, { name, symbol, uri });
             // 继续处理 URI 获取 logo
             return await fetchMetadataFromURI(uri, { name, symbol });
           }
         } catch (error) {
-          console.warn(`[Metadata] 直接读取失败: ${mint.toString()}`, error);
+          // 直接读取失败，返回 null
         }
       }
       return null;
     }
 
     if (offset >= data.length) {
-      console.log(`[Metadata] 数据不足，无法读取 data 内容: ${mint.toString()}`);
       return null;
     }
 
     // 读取 Data 结构（DataV2）
     // name: string (u32 length + bytes)
     if (offset + 4 > data.length) {
-      console.log(`[Metadata] 数据不足，无法读取 name: ${mint.toString()}`);
       return null;
     }
     const nameResult = deserializeString(data, offset);
@@ -403,7 +554,6 @@ async function parseMetadataAccount(data: Buffer, mint: PublicKey): Promise<Toke
 
     // symbol: string (u32 length + bytes)
     if (offset + 4 > data.length) {
-      console.log(`[Metadata] 数据不足，无法读取 symbol: ${mint.toString()}`);
       return null;
     }
     const symbolResult = deserializeString(data, offset);
@@ -412,20 +562,50 @@ async function parseMetadataAccount(data: Buffer, mint: PublicKey): Promise<Toke
 
     // uri: string (u32 length + bytes)
     if (offset + 4 > data.length) {
-      console.log(`[Metadata] 数据不足，无法读取 uri: ${mint.toString()}`);
       return null;
     }
     const uriResult = deserializeString(data, offset);
     const uri = uriResult.value;
     offset = uriResult.newOffset;
 
-    console.log(`[Metadata] 成功解析: ${mint.toString()}`, { name, symbol, uri });
+    // sellerFeeBasisPoints: u16 (little-endian)
+    if (offset + 2 > data.length) {
+      return null;
+    }
+    const sellerFeeBasisPoints = data.readUInt16LE(offset);
+    offset += 2;
+
+    // creators: Option<Vec<Creator>>
+    const hasCreators = offset < data.length && data[offset] === 1;
+    offset += 1;
+    let creators: any[] | null = null;
+    if (hasCreators) {
+      // Vec length: u32
+      if (offset + 4 > data.length) {
+        return null;
+      }
+      const creatorsLength = data.readUInt32LE(offset);
+      offset += 4;
+      creators = [];
+      for (let i = 0; i < creatorsLength; i++) {
+        // Creator 结构: address (32 bytes) + verified (1 byte) + share (1 byte)
+        if (offset + 34 > data.length) {
+          break;
+        }
+        const creatorAddress = new PublicKey(data.slice(offset, offset + 32));
+        offset += 32;
+        const verified = data[offset] === 1;
+        offset += 1;
+        const share = data[offset];
+        offset += 1;
+        creators.push({ address: creatorAddress, verified, share });
+      }
+    }
 
     // 如果 URI 存在，尝试从 URI 获取完整的元数据（包括 logo）
     return await fetchMetadataFromURI(uri, { name, symbol });
   } catch (error) {
     // 如果解析失败，返回 null
-    console.warn(`Failed to parse metadata account for mint ${mint.toString()}:`, error);
     return null;
   }
 }

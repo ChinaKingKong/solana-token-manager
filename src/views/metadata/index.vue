@@ -4,8 +4,9 @@ import { message } from 'ant-design-vue';
 import { useI18n } from 'vue-i18n';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import { useWallet } from '../../hooks/useWallet';
+import MintAddressInput from '../../components/MintAddressInput.vue';
 import { uploadJSONToIPFS, validatePinataCredentials } from '../../utils/ipfs';
-import { getMetadataPDA, createUpdateMetadataAccountV2Instruction, createCreateMetadataAccountV3Instruction, TOKEN_METADATA_PROGRAM_ID } from '../../utils/metadata';
+import { getMetadataPDA, createUpdateMetadataAccountV3Instruction, createCreateMetadataAccountV3Instruction, TOKEN_METADATA_PROGRAM_ID, getUpdateAuthorityFromMetadata, parseMetadataDataV2 } from '../../utils/metadata';
 import { getMint } from '@solana/spl-token';
 
 const { t } = useI18n();
@@ -66,8 +67,8 @@ const validateApiKey = async () => {
     message.error(t('setMetadata.enterPinataApiKey'));
     apiKeyValid.value = false;
     return false;
-  }
-  
+      }
+      
   validatingApiKey.value = true;
   
   try {
@@ -80,9 +81,9 @@ const validateApiKey = async () => {
     
     if (isValid) {
       message.success(t('ipfsUpload.validateSuccess'));
-    } else {
+  } else {
       message.error(t('ipfsUpload.validateFailed'));
-    }
+  }
     
     return isValid;
   } catch (error) {
@@ -166,12 +167,12 @@ const submitMetadata = async () => {
     message.error(t('setMetadata.tokenNameRequired'));
     return;
   }
-
+  
   if (!tokenSymbol.value || tokenSymbol.value.trim() === '') {
     message.error(t('setMetadata.tokenSymbolRequired'));
     return;
   }
-
+  
   // 验证元数据 URL
   if (!metadataUrl.value || metadataUrl.value.trim() === '') {
     if (metadataSourceMode.value === 'upload') {
@@ -187,14 +188,14 @@ const submitMetadata = async () => {
     message.error(t('wallet.connectWallet'));
     return;
   }
-
+  
   if (!walletState.value?.wallet) {
     message.error(t('wallet.connectWallet'));
     return;
   }
-
+  
   processing.value = true;
-
+  
   try {
     // 安全地创建 PublicKey
     let mintPubkey: PublicKey;
@@ -254,18 +255,29 @@ const submitMetadata = async () => {
 
     // 检查 Metadata 账户是否存在
     let metadataExists = false;
+    let actualUpdateAuthority: PublicKey | null = null;
+    let existingDataV2: { sellerFeeBasisPoints: number; creators: Array<{ address: PublicKey; verified: boolean; share: number }> | null } | null = null;
     try {
       const accountInfo = await conn.getAccountInfo(metadataPDA);
       metadataExists = accountInfo !== null && accountInfo.owner.equals(TOKEN_METADATA_PROGRAM_ID);
-    } catch (error) {
+      
+      // 如果账户存在，解析 update authority 和现有数据
+      if (metadataExists && accountInfo && accountInfo.data) {
+        actualUpdateAuthority = getUpdateAuthorityFromMetadata(accountInfo.data);
+        existingDataV2 = parseMetadataDataV2(accountInfo.data);
+      }
+  } catch (error) {
       metadataExists = false;
     }
 
-    // 准备元数据数据（使用 trim 后的值）
+    // 准备元数据数据（使用 trim 后的值，并保留现有字段）
+    // 如果无法解析现有数据，使用默认值（0 和 null）
     const metadataData = {
       name: tokenName.value.trim(),
       symbol: tokenSymbol.value.trim(),
       uri: metadataUrl.value.trim(),
+      sellerFeeBasisPoints: existingDataV2?.sellerFeeBasisPoints ?? 0,
+      creators: existingDataV2?.creators ?? null,
     };
 
     // 创建交易
@@ -273,11 +285,24 @@ const submitMetadata = async () => {
 
     if (metadataExists) {
       // 如果元数据账户已存在，使用更新指令
-      // 注意：需要确保当前钱包是 update authority
-      const updateInstruction = createUpdateMetadataAccountV2Instruction(
+      // 验证当前钱包是否是 update authority
+      if (!actualUpdateAuthority) {
+        message.error(t('setMetadata.permissionDenied') + ': ' + (t('setMetadata.accountNotFound') || '无法获取 update authority'));
+        return;
+      }
+      
+      if (!actualUpdateAuthority.equals(updateAuthority)) {
+        message.error(t('setMetadata.permissionDenied') + ': ' + (t('setMetadata.notMintAuthority') || '当前钱包不是 update authority').replace('{authority}', actualUpdateAuthority.toString()));
+        return;
+      }
+      
+      const updateInstruction = createUpdateMetadataAccountV3Instruction(
         metadataPDA,
         updateAuthority,
-        metadataData
+        metadataData,
+        undefined, // newUpdateAuthority
+        undefined, // primarySaleHappened
+        true // isMutable (保持可变)
       );
       transaction.add(updateInstruction);
     } else {
@@ -308,10 +333,23 @@ const submitMetadata = async () => {
     }
 
     // 获取最近的区块哈希
-    const { blockhash } = await conn.getLatestBlockhash('finalized');
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('finalized');
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = updateAuthority;
-
+    
+    // 先模拟交易以获取详细错误信息
+    try {
+      const simulation = await conn.simulateTransaction(transaction);
+      
+      if (simulation.value.err) {
+        const errorMsg = simulation.value.err.toString();
+        message.error(`${t('setMetadata.setFailed')}: ${errorMsg}`);
+        return;
+      }
+    } catch (simError: any) {
+      // 继续尝试发送，因为某些情况下模拟可能失败但实际发送会成功
+    }
+    
     // 发送交易
     let signature: string;
     try {
@@ -326,7 +364,7 @@ const submitMetadata = async () => {
             maxRetries: 3,
           });
         } catch (signError: any) {
-          throw sendError;
+          throw sendError; // 抛出原始错误
         }
       } else {
         throw sendError;
@@ -334,13 +372,21 @@ const submitMetadata = async () => {
     }
 
     // 等待确认
-    await conn.confirmTransaction(signature, 'confirmed');
+    const confirmation = await conn.confirmTransaction({
+      signature,
+      blockhash,
+      lastValidBlockHeight,
+    }, 'confirmed');
+
+    if (confirmation.value.err) {
+      throw new Error(`${t('setMetadata.setFailed')}: ${JSON.stringify(confirmation.value.err)}`);
+    }
 
     metadataSuccess.value = true;
     message.success(t('setMetadata.setSuccess'));
   } catch (error: any) {
     // 处理特定错误
-    if (error.message?.includes('User rejected') || error.message?.includes('用户取消')) {
+    if (error.message?.includes('User rejected') || error.message?.includes('用户取消') || error.message?.includes('rejected')) {
       message.warning(t('setMetadata.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('Insufficient funds') || error.message?.includes('insufficient funds')) {
       message.error(t('setMetadata.insufficientFunds'));
@@ -352,17 +398,33 @@ const submitMetadata = async () => {
       message.error(t('setMetadata.insufficientFunds'));
     } else if (error.message?.includes('Simulation failed') || error.message?.includes('simulation failed')) {
       message.error(error.message);
+    } else if (error.name === 'WalletSendTransactionError' || error.message?.includes('Unexpected error')) {
+      // 处理 WalletSendTransactionError，提供更详细的错误提示
+      const detailedError = error.message || error.toString() || '交易发送失败';
+      message.error(`${t('setMetadata.setFailed')}: ${detailedError}`);
     } else if (error.logs && Array.isArray(error.logs)) {
       // 尝试从日志中提取错误信息
       const errorLog = error.logs.find((log: string) => log.includes('Error') || log.includes('error'));
       if (errorLog) {
         message.error(`${t('setMetadata.setFailed')}: ${errorLog}`);
       } else {
-        message.error(`${t('setMetadata.setFailed')}: ${error.message || t('common.error')}`);
+        const errorMsg = error.message || error.toString() || t('common.error');
+        message.error(`${t('setMetadata.setFailed')}: ${errorMsg}`);
       }
     } else {
-      const errorMsg = error.message || t('common.error');
-      message.error(`设置元数据失败: ${errorMsg}`);
+      // 尝试获取更详细的错误信息
+      let errorMsg = '';
+      if (error.message) {
+        errorMsg = error.message;
+      } else if (error.toString && error.toString() !== '[object Object]') {
+        errorMsg = error.toString();
+      } else if (error.name) {
+        errorMsg = error.name;
+      } else {
+        errorMsg = t('common.error') || '未知错误';
+      }
+      
+      message.error(`${t('setMetadata.setFailed')}: ${errorMsg}`);
     }
   } finally {
     processing.value = false;
@@ -404,7 +466,7 @@ const viewOnSolscan = (mint: string) => {
   window.open(`https://solscan.io/token/${mint}${cluster}`, '_blank');
 };
 
-// 重置表单
+  // 重置表单
 const resetForm = () => {
   metadataSuccess.value = false;
   tokenMintAddress.value = '';
@@ -522,7 +584,7 @@ defineOptions({
         </div>
       </div>
     </div>
-
+    
     <!-- 设置元数据表单 -->
     <div v-else class="w-full py-3">
       <div
@@ -554,17 +616,14 @@ defineOptions({
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('setMetadata.mintAddress') }} <span class="text-red-400">*</span>
             </label>
-            <a-input
-              v-model:value="tokenMintAddress"
-              :placeholder="t('setMetadata.mintAddressPlaceholder')"
-              size="large"
-              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
-              :class="{ '!border-solana-green': tokenMintAddress && isValidSolanaAddress(tokenMintAddress) }"
-            />
-            <div class="mt-1.5 text-xs text-white/50">{{ t('setMetadata.mintAddress') }}</div>
-            <div v-if="tokenMintAddress && !isValidSolanaAddress(tokenMintAddress)" class="mt-1.5 text-xs text-red-400">
-              {{ t('setMetadata.addressInvalid') }}
-            </div>
+            <MintAddressInput
+              v-model="tokenMintAddress"
+              :desc="t('setMetadata.mintAddress')"
+            >
+              <template #error>
+                {{ t('setMetadata.addressInvalid') }}
+              </template>
+            </MintAddressInput>
           </div>
 
           <!-- 代币信息 -->
@@ -658,19 +717,19 @@ defineOptions({
                   :class="{ '!border-solana-green': pinataApiKey }"
                 />
               </div>
-              
+        
               <div>
                 <label class="block text-sm font-medium text-white/90 mb-2">
                   Pinata Secret API Key <span class="text-red-400">*</span>
                 </label>
-                <a-input
-                  v-model:value="pinataSecretApiKey"
+          <a-input 
+            v-model:value="pinataSecretApiKey" 
                   :placeholder="t('ipfsUpload.enterPinataSecretKey')"
-                  type="password"
+            type="password"
                   size="large"
                   class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
                   :class="{ '!border-solana-green': pinataSecretApiKey }"
-                />
+          />
               </div>
               
               <div class="flex items-center gap-3">
@@ -698,10 +757,10 @@ defineOptions({
 
           <!-- 上传元数据按钮（仅在上传模式显示） -->
           <div v-if="metadataSourceMode === 'upload'">
-            <a-button
-              type="primary"
-              :loading="uploadingMetadata"
-              @click="uploadMetadataToIPFS"
+        <a-button 
+          type="primary" 
+          :loading="uploadingMetadata" 
+          @click="uploadMetadataToIPFS"
               :disabled="!apiKeyValid || !tokenName || !tokenSymbol"
               size="large"
               block
@@ -710,17 +769,17 @@ defineOptions({
                 <UploadOutlined />
               </template>
               {{ uploadingMetadata ? t('setMetadata.uploadingMetadata') : t('setMetadata.uploadMetadataToIpfs') }}
-            </a-button>
-          </div>
-
+        </a-button>
+      </div>
+      
           <!-- 元数据URL -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('setMetadata.metadataUrlLabel') }} <span class="text-red-400">*</span>
             </label>
             <div class="flex items-center gap-2">
-              <a-input
-                v-model:value="metadataUrl"
+        <a-input 
+          v-model:value="metadataUrl" 
                 :placeholder="t('setMetadata.metadataUrlPlaceholderExample')"
                 size="large"
                 class="flex-1 bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
@@ -734,24 +793,24 @@ defineOptions({
                   <GlobalOutlined />
                 </template>
                 {{ t('ipfsUpload.convert') }}
-              </a-button>
-            </div>
+          </a-button>
+        </div>
             <div class="mt-1.5 text-xs text-white/50">
               {{ metadataSourceMode === 'upload' ? t('setMetadata.metadataUrlDescUpload') : t('setMetadata.metadataUrlDescExisting') }}
             </div>
           </div>
-
+      
           <!-- 元数据预览 -->
           <div v-if="metadataJson" class="bg-white/5 rounded-xl p-4 border border-white/10">
             <h3 class="m-0 text-base font-semibold text-white mb-4">{{ t('setMetadata.metadataPreview') }}</h3>
             <pre class="text-xs text-white/80 font-mono bg-white/5 rounded-lg p-4 border border-white/10 overflow-auto max-h-64">{{ JSON.stringify(metadataJson, null, 2) }}</pre>
           </div>
-
+      
           <!-- 权限设置 -->
           <div class="bg-white/5 rounded-xl p-4 border border-white/10">
             <a-checkbox v-model:checked="modifyAfterMint" class="text-white/90">
               {{ t('setMetadata.allowModifyAfterMint') }}
-            </a-checkbox>
+        </a-checkbox>
             <div class="mt-2 text-xs text-white/50">
               {{ t('setMetadata.allowModifyAfterMintDesc') }}
             </div>
@@ -777,11 +836,11 @@ defineOptions({
 
           <!-- 设置按钮 -->
           <div class="pt-2">
-            <a-button
-              type="primary"
-              :loading="processing"
+        <a-button 
+          type="primary" 
+          :loading="processing" 
               :disabled="!isValidSolanaAddress(tokenMintAddress) || !tokenName || !tokenSymbol || !metadataUrl"
-              @click="submitMetadata"
+          @click="submitMetadata"
               size="large"
               block
               class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
@@ -789,7 +848,7 @@ defineOptions({
                 <FileTextOutlined />
               </template>
               {{ processing ? t('setMetadata.setting') : t('setMetadata.set') }}
-            </a-button>
+        </a-button>
           </div>
         </div>
       </div>
@@ -807,7 +866,7 @@ defineOptions({
   to {
     opacity: 1;
     transform: translateY(0);
-  }
+}
 }
 
 /* 输入框样式覆盖 */
@@ -893,4 +952,4 @@ defineOptions({
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: rgba(255, 255, 255, 0.4) !important;
 }
-</style>
+</style> 

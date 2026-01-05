@@ -35,7 +35,7 @@ export async function updateBalance() {
     const balance = await connection.getBalance(walletPublicKey.value);
     walletBalance.value = balance / 1e9; // 转换为SOL
   } catch (error) {
-    console.error('获取余额失败:', error);
+    // 获取余额失败，静默处理
   }
 }
 
@@ -43,7 +43,6 @@ export async function updateBalance() {
 export async function connectWallet() {
   // 这个函数现在主要作为向后兼容的接口
   // 实际的钱包连接逻辑在 useWallet Hook 中
-  console.warn('connectWallet 已弃用，请使用 useWallet Hook 代替');
   return false;
 }
 

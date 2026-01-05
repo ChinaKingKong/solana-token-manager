@@ -104,7 +104,6 @@ export function useWalletProvider() {
 
       return true;
     } catch (error) {
-      console.error('钱包连接失败:', error);
       throw error;
     } finally {
       connecting.value = false;
@@ -136,7 +135,6 @@ export function useWalletProvider() {
       connected.value = false;
       balance.value = 0;
     } catch (error) {
-      console.error('断开钱包连接失败:', error);
       throw error;
     } finally {
       disconnecting.value = false;
@@ -154,7 +152,6 @@ export function useWalletProvider() {
       const lamports = await connection.value.getBalance(publicKey.value);
       balance.value = lamports / LAMPORTS_PER_SOL;
     } catch (error: any) {
-      console.error('获取SOL余额失败:', error);
       balance.value = 0;
     }
   };
@@ -170,7 +167,6 @@ export function useWalletProvider() {
       await connection.value.confirmTransaction(signature);
       return signature;
     } catch (error) {
-      console.error('发送交易失败:', error);
       throw error;
     }
   };
@@ -184,7 +180,6 @@ export function useWalletProvider() {
     try {
       return await wallet.value.signTransaction(transaction);
     } catch (error) {
-      console.error('签名交易失败:', error);
       throw error;
     }
   };
@@ -198,7 +193,6 @@ export function useWalletProvider() {
     try {
       return await wallet.value.signAllTransactions(transactions);
     } catch (error) {
-      console.error('签名所有交易失败:', error);
       throw error;
     }
   };

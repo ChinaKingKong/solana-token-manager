@@ -41,7 +41,6 @@ export const createNewToken = async (
       tokenMint: tokenMint.toString()
     };
   } catch (error) {
-    console.error('创建代币失败:', error);
     return {
       success: false,
       error
@@ -68,7 +67,6 @@ export const createTokenAccount = async (
       tokenAccount: tokenAccount.address.toString()
     };
   } catch (error) {
-    console.error('创建代币账户失败:', error);
     return {
       success: false,
       error
@@ -98,7 +96,6 @@ export const mintToken = async (
       success: true
     };
   } catch (error) {
-    console.error('铸造代币失败:', error);
     return {
       success: false,
       error
@@ -128,7 +125,6 @@ export const transferToken = async (
       success: true
     };
   } catch (error) {
-    console.error('转账代币失败:', error);
     return {
       success: false,
       error
@@ -158,7 +154,6 @@ export const burnToken = async (
       success: true
     };
   } catch (error) {
-    console.error('销毁代币失败:', error);
     return {
       success: false,
       error
@@ -186,7 +181,6 @@ export const freezeTokenAccount = async (
       success: true
     };
   } catch (error) {
-    console.error('冻结账户失败:', error);
     return {
       success: false,
       error
@@ -214,7 +208,6 @@ export const thawTokenAccount = async (
       success: true
     };
   } catch (error) {
-    console.error('解冻账户失败:', error);
     return {
       success: false,
       error
@@ -231,7 +224,6 @@ export const getTokenInfo = async (tokenMint: PublicKey) => {
       mintInfo
     };
   } catch (error) {
-    console.error('获取代币信息失败:', error);
     return {
       success: false,
       error

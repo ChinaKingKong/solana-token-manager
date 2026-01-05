@@ -29,10 +29,9 @@ const getWalletDisplayText = computed(() => {
 
   if (walletState.value.publicKey) {
     try {
-      const publicKeyStr = walletState.value.publicKey.toBase58();
-      return `${publicKeyStr.slice(0, 4)}...${publicKeyStr.slice(-4)}`;
+    const publicKeyStr = walletState.value.publicKey.toBase58();
+    return `${publicKeyStr.slice(0, 4)}...${publicKeyStr.slice(-4)}`;
     } catch (error) {
-      console.error('获取公钥字符串失败:', error);
       return t('wallet.addressError');
     }
   }
@@ -65,7 +64,6 @@ const handleSelectWallet = async (walletAdapter: any) => {
     message.success(`${t('wallet.walletConnected')} ${walletAdapter.name}`);
   } catch (error: any) {
     message.error(`${t('wallet.connectFailed')}: ${error.message || t('common.error')}`);
-    console.error(error);
   }
 };
 
@@ -92,7 +90,6 @@ const handleDisconnect = async () => {
     message.success(t('wallet.disconnectWallet'));
   } catch (error) {
     message.error(t('common.error'));
-    console.error(error);
   }
 };
 
@@ -138,10 +135,10 @@ const availableWallets = computed(() => {
           <div class="w-6 h-6 flex items-center justify-center shrink-0">
             <img v-if="walletState.wallet?.icon" :src="walletState.wallet.icon" :alt="walletState.wallet?.name" class="w-full h-full object-contain" />
             <WalletOutlined v-else class="text-base text-white" />
-          </div>
+        </div>
           <div class="text-sm font-semibold text-white font-mono">{{ getWalletDisplayText }}</div>
           <DownOutlined class="text-xs text-white/50 font-bold transition-all duration-200 ease-in-out group-hover:text-white/80" />
-        </div>
+      </div>
 
         <template #overlay>
           <a-menu class="bg-white border border-black/10 rounded-lg p-1 min-w-[160px] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
@@ -182,21 +179,21 @@ const availableWallets = computed(() => {
     >
       <div class="wallet-list-container">
         <template v-for="(wallet, index) in availableWallets" :key="wallet.name">
-          <div
+        <div
             class="flex items-center justify-between px-4 py-[18px] bg-transparent cursor-pointer transition-all duration-200 ease-in-out hover:bg-white/5 active:bg-white/[0.06]"
-            @click="handleSelectWallet(wallet)"
-          >
+          @click="handleSelectWallet(wallet)"
+        >
             <div class="flex items-center gap-3.5 flex-1">
               <div class="w-14 h-14 flex items-center justify-center shrink-0 bg-white/5 rounded-full p-2">
-                <img
-                  v-if="wallet.icon"
-                  :src="wallet.icon"
-                  :alt="wallet.name"
+          <img
+            v-if="wallet.icon"
+            :src="wallet.icon"
+            :alt="wallet.name"
                   class="w-full h-full object-contain"
-                />
+          />
                 <div v-else class="w-full h-full flex items-center justify-center bg-gradient-solana rounded-full text-lg font-bold text-white">
-                  {{ wallet.name.charAt(0) }}
-                </div>
+            {{ wallet.name.charAt(0) }}
+          </div>
               </div>
               <div class="text-[15px] font-semibold text-white">{{ wallet.name }}</div>
             </div>
@@ -346,11 +343,11 @@ const availableWallets = computed(() => {
 :deep(.wallet-selector-modal .ant-modal-close) {
   color: rgba(255, 255, 255, 0.5);
   transition: all 0.2s ease;
-}
+  }
 
 :deep(.wallet-selector-modal .ant-modal-close:hover) {
   color: #ffffff;
-}
+  }
 
 :deep(.wallet-selector-modal .ant-modal-body) {
   padding: 20px 24px;

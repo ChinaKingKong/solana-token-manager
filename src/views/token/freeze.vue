@@ -23,6 +23,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+import MintAddressInput from '../../components/MintAddressInput.vue';
 
 const { t } = useI18n();
 
@@ -129,7 +130,6 @@ const fetchTokenInfo = async () => {
     }
   } catch (error: any) {
     message.error(`${t('freezeManage.freezeFailed')}: ${error.message || t('freezeManage.mintAddressRequired')}`);
-    console.error('获取代币信息失败:', error);
     tokenInfo.value = null;
     hasFreezeAuthority.value = false;
   } finally {
@@ -178,7 +178,6 @@ const fetchAccountInfo = async () => {
     } else {
       message.error(`${t('common.error')}: ${error.message || t('common.error')}`);
     }
-    console.error('获取账户信息失败:', error);
     accountInfo.value = null;
     isFrozen.value = false;
   } finally {
@@ -300,6 +299,7 @@ const executeOperation = async () => {
           targetAccountPubkey, // account (代币账户)
           mintPubkey, // mint (代币mint地址)
           ownerPubkey, // freezeAuthority (冻结权限持有者)
+          undefined, // multiSigners (多签账户，单签时传 undefined)
           TOKEN_PROGRAM_ID // programId (可选，默认为 TOKEN_PROGRAM_ID)
         )
       );
@@ -310,6 +310,7 @@ const executeOperation = async () => {
           targetAccountPubkey, // account (代币账户)
           mintPubkey, // mint (代币mint地址)
           ownerPubkey, // freezeAuthority (冻结权限持有者)
+          undefined, // multiSigners (多签账户，单签时传 undefined)
           TOKEN_PROGRAM_ID // programId (可选，默认为 TOKEN_PROGRAM_ID)
         )
       );
@@ -367,7 +368,6 @@ const executeOperation = async () => {
     // 刷新账户信息
     await fetchAccountInfo();
   } catch (error: any) {
-    console.error('操作失败:', error);
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
@@ -566,17 +566,13 @@ defineOptions({
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('freezeManage.mintAddress') }} <span class="text-red-400">*</span>
             </label>
-            <a-input
-              v-model:value="tokenMintAddress"
-              :placeholder="t('freezeManage.mintAddressPlaceholder')"
-              size="large"
-              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
-              :class="{ '!border-solana-green': tokenMintAddress }"
+            <MintAddressInput
+              v-model="tokenMintAddress"
+              :desc="t('freezeManage.mintAddressDesc')"
             />
-            <div class="mt-1.5 text-xs text-white/50">{{ t('freezeManage.mintAddressDesc') }}</div>
           </div>
 
-          <!-- 代币信息显示 -->
+      <!-- 代币信息显示 -->
           <div v-if="tokenInfo" class="space-y-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
@@ -622,7 +618,7 @@ defineOptions({
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
                   <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.permissionStatus') }}</div>
-                  <div class="text-sm font-semibold" :class="hasFreezeAuthority ? 'text-green-400' : 'text-red-400'">
+                  <div class="text-xs font-semibold" :class="hasFreezeAuthority ? 'text-green-400' : 'text-red-400'">
                     {{ hasFreezeAuthority ? t('freezeManage.hasPermission') : t('freezeManage.noPermission') }}
                   </div>
                 </div>
@@ -639,15 +635,15 @@ defineOptions({
                 </div>
               </div>
             </div>
-          </div>
+      </div>
 
           <!-- 目标账户地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('freezeManage.targetAccountAddress') }} <span class="text-red-400">*</span>
             </label>
-            <a-input
-              v-model:value="targetAccountAddress"
+        <a-input
+          v-model:value="targetAccountAddress"
               :placeholder="t('freezeManage.targetAccountAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
@@ -710,26 +706,26 @@ defineOptions({
                   <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.accountOwner') }}</div>
                   <div class="text-xs font-mono text-white/70 truncate">{{ formatAddress(accountInfo.owner) }}</div>
                 </div>
-              </div>
             </div>
+      </div>
 
-            <!-- 操作类型选择 -->
+      <!-- 操作类型选择 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <h3 class="m-0 text-base font-semibold text-white mb-4">{{ t('freezeManage.selectOperation') }}</h3>
               <a-radio-group v-model:value="operationType" button-style="solid" class="w-full">
                 <a-radio-button value="freeze" :disabled="isFrozen" class="flex-1">
-                  <template #icon>
-                    <LockOutlined />
-                  </template>
+            <template #icon>
+              <LockOutlined />
+            </template>
                   {{ t('freezeManage.freeze') }}
-                </a-radio-button>
+          </a-radio-button>
                 <a-radio-button value="thaw" :disabled="!isFrozen" class="flex-1">
-                  <template #icon>
-                    <UnlockOutlined />
-                  </template>
+            <template #icon>
+              <UnlockOutlined />
+            </template>
                   {{ t('freezeManage.thaw') }}
-                </a-radio-button>
-              </a-radio-group>
+          </a-radio-button>
+        </a-radio-group>
 
               <div class="mt-4 p-3 rounded-lg" :class="operationType === 'freeze' ? 'bg-[rgba(250,173,20,0.1)] border border-[rgba(250,173,20,0.2)]' : 'bg-[rgba(82,196,26,0.1)] border border-[rgba(82,196,26,0.2)]'">
                 <div v-if="operationType === 'freeze'" class="flex items-start gap-2">
@@ -763,32 +759,32 @@ defineOptions({
                   <li>{{ t('freezeManage.operationTip3') }}</li>
                   <li>{{ t('freezeManage.operationTip4') }}</li>
                 </ul>
-              </div>
-            </div>
           </div>
+        </div>
+      </div>
 
           <!-- 操作按钮 -->
           <div class="pt-2">
-            <a-button
-              :type="operationType === 'freeze' ? 'primary' : 'default'"
-              danger
-              :loading="processing"
-              :disabled="!isFormValid"
-              @click="handleOperation"
+          <a-button
+            :type="operationType === 'freeze' ? 'primary' : 'default'"
+            danger
+            :loading="processing"
+            :disabled="!isFormValid"
+            @click="handleOperation"
               size="large"
               block
               :class="operationType === 'freeze' 
                 ? 'flex items-center justify-center bg-gradient-to-r from-red-500 to-red-600 border-none text-white font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(255,77,79,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0'
                 : 'flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0'">
-              <template #icon>
-                <LockOutlined v-if="operationType === 'freeze'" />
-                <UnlockOutlined v-else />
-              </template>
+            <template #icon>
+              <LockOutlined v-if="operationType === 'freeze'" />
+              <UnlockOutlined v-else />
+            </template>
               {{ processing ? (operationType === 'freeze' ? t('freezeManage.freezing') : t('freezeManage.thawing')) : (operationType === 'freeze' ? t('freezeManage.freeze') : t('freezeManage.thaw')) }}
-            </a-button>
+          </a-button>
           </div>
         </div>
-      </div>
+    </div>
     </div>
   </div>
 </template>
@@ -798,12 +794,12 @@ defineOptions({
   from {
     opacity: 0;
     transform: translateY(10px);
-  }
+}
 
   to {
     opacity: 1;
     transform: translateY(0);
-  }
+}
 }
 
 /* 输入框样式覆盖 */

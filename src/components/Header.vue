@@ -107,18 +107,18 @@ const handleLanguageChange = (newLocale: string) => {
 <template>
   <div class="header" :class="{ 'header-collapsed': sidebarCollapsed }">
     <div class="header-inner">
-      <div class="header-content">
+    <div class="header-content">
         <!-- 左侧页面指示区域 -->
-        <div class="header-left">
+      <div class="header-left">
           <div class="page-indicator" v-if="currentPage && currentPage.title">
             <component :is="currentPage.icon" class="indicator-icon" />
             <span class="indicator-text">{{ currentPage.title }}</span>
             <RightOutlined class="arrow-icon" />
           </div>
-        </div>
+      </div>
 
         <!-- 右侧钱包区域 -->
-        <div class="header-right">
+      <div class="header-right">
           <!-- 语言切换按钮 -->
           <a-dropdown trigger="click" placement="bottomRight">
             <a-button class="language-switch-btn">
@@ -155,7 +155,7 @@ const handleLanguageChange = (newLocale: string) => {
               </a-menu>
             </template>
           </a-dropdown>
-          <Wallet />
+        <Wallet />
         </div>
       </div>
       <div class="header-border"></div>

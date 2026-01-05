@@ -50,6 +50,14 @@ const keepOriginalUrl = ref(true);
 // 组件状态
 const actualNewUrl = ref('');
 
+// JSON 示例内容（避免在国际化字符串中使用 JSON，防止 vue-i18n 解析错误）
+const jsonExample = `{
+  "name": "Token Name",
+  "symbol": "SYMBOL",
+  "description": "Token description",
+  "image": "ipfs://your-image-cid"
+}`;
+
 // 验证Pinata API密钥或JWT
 const validateApiKey = async () => {
   if (authMode.value === 'jwt') {
@@ -59,10 +67,10 @@ const validateApiKey = async () => {
       return false;
     }
   } else {
-    if (!pinataApiKey.value || !pinataSecretApiKey.value) {
+  if (!pinataApiKey.value || !pinataSecretApiKey.value) {
       message.error(t('ipfsUpload.apiKeyRequired'));
-      apiKeyValid.value = false;
-      return false;
+    apiKeyValid.value = false;
+    return false;
     }
   }
   
@@ -83,7 +91,6 @@ const validateApiKey = async () => {
     
     return isValid;
   } catch (error) {
-    console.error('验证凭证时出错:', error);
     message.error(t('ipfsUpload.validateFailed'));
     apiKeyValid.value = false;
     return false;
@@ -111,7 +118,6 @@ const editUploadedJson = () => {
     
     message.info(t('ipfsUpload.editAndReupload'));
   } else {
-    console.error('没有可编辑的JSON内容');
     message.error(t('ipfsUpload.jsonContentRequired'));
     isEditingUploadedJson.value = false;
   }
@@ -192,12 +198,12 @@ const handleFileUpload = async () => {
               const jsonData = JSON.parse(e.target?.result as string);
               uploadedJsonContent.value = jsonData;
             } catch (parseError) {
-              console.error('解析JSON文件失败:', parseError);
+              // 解析JSON文件失败，静默处理
             }
           };
           reader.readAsText(file);
         } catch (fileError) {
-          console.error('读取JSON文件失败:', fileError);
+          // 读取JSON文件失败，静默处理
         }
       } else {
         // 非JSON文件，清空JSON内容
@@ -212,7 +218,6 @@ const handleFileUpload = async () => {
   } catch (error) {
     uploadStatus.value = 'error';
     message.error(t('ipfsUpload.uploadFailed'));
-    console.error(error);
   } finally {
     uploading.value = false;
   }
@@ -300,7 +305,6 @@ const handleJsonUpload = async () => {
     } else {
       message.error(t('ipfsUpload.uploadFailed'));
     }
-    console.error(error);
   } finally {
     uploading.value = false;
   }
@@ -389,13 +393,13 @@ defineOptions({
                     <li>{{ t('ipfsUpload.uploadDescription1') }}</li>
                     <li>{{ t('ipfsUpload.uploadDescription2') }}</li>
                     <li>{{ t('ipfsUpload.uploadDescription3') }}</li>
-                  </ul>
+          </ul>
                 </div>
               </div>
             </div>
-          </div>
-
-          <!-- Pinata API配置 -->
+    </div>
+    
+    <!-- Pinata API配置 -->
           <div class="bg-white/5 rounded-xl p-4 border border-white/10">
             <h3 class="m-0 text-lg font-semibold text-white mb-4">{{ t('ipfsUpload.pinataConfig') }}</h3>
             <div class="space-y-4">
@@ -426,13 +430,13 @@ defineOptions({
                     :class="{ '!border-solana-green': pinataApiKey }"
                   />
                 </div>
-                
+      
                 <div>
                   <label class="block text-sm font-medium text-white/90 mb-2">
                     {{ t('ipfsUpload.pinataSecretKey') }} <span class="text-red-400">*</span>
                   </label>
-                  <a-input
-                    v-model:value="pinataSecretApiKey"
+        <a-input 
+          v-model:value="pinataSecretApiKey" 
                     :placeholder="t('ipfsUpload.pinataSecretKeyPlaceholder')"
                     type="password"
                     size="large"
@@ -453,27 +457,27 @@ defineOptions({
                 <a-input
                   v-model:value="pinataJwt"
                   :placeholder="t('ipfsUpload.pinataJwtPlaceholder')"
-                  type="password"
+          type="password"
                   size="large"
                   class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
                   :class="{ '!border-solana-green': pinataJwt }"
-                />
+        />
                 <div class="mt-2 text-xs text-white/60">
                   <span v-html="t('ipfsUpload.jwtDesc', { link: '<a href=\'https://app.pinata.cloud/\' target=\'_blank\' class=\'text-solana-green hover:underline\'>' + t('ipfsUpload.pinataAppLink') + '</a>' })"></span>
                 </div>
               </div>
-              
+      
               <div class="flex items-center gap-3">
-                <a-button
-                  type="primary"
-                  :loading="validatingApiKey"
-                  @click="validateApiKey"
+      <a-button 
+        type="primary" 
+        :loading="validatingApiKey" 
+        @click="validateApiKey"
                   class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-2.5 h-auto text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300">
                   <template #icon>
                     <ReloadOutlined />
                   </template>
                   {{ t('ipfsUpload.validate') }}
-                </a-button>
+      </a-button>
                 <div v-if="apiKeyValid" class="flex items-center gap-2 text-green-400">
                   <CheckCircleOutlined />
                   <span class="text-sm">{{ t('ipfsUpload.validateSuccess') }}</span>
@@ -484,8 +488,8 @@ defineOptions({
                 {{ t('ipfsUpload.securityNote') }}
               </div>
             </div>
-          </div>
-
+    </div>
+    
           <!-- 上传模式选择 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">{{ t('ipfsUpload.uploadMode') }}</label>
@@ -502,38 +506,38 @@ defineOptions({
                 </template>
                 {{ t('ipfsUpload.jsonMode') }}
               </a-radio-button>
-            </a-radio-group>
-          </div>
-
-          <!-- 文件上传模式 -->
+      </a-radio-group>
+    </div>
+    
+    <!-- 文件上传模式 -->
           <div v-if="uploadMode === 'file'">
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('ipfsUpload.selectFile') }} <span class="text-red-400">*</span>
             </label>
-            <a-upload-dragger
-              v-model:fileList="fileList"
-              :beforeUpload="beforeUpload"
-              @change="handleFileChange"
-              :multiple="false"
+      <a-upload-dragger
+        v-model:fileList="fileList"
+        :beforeUpload="beforeUpload"
+        @change="handleFileChange"
+        :multiple="false"
               :showUploadList="{ showRemoveIcon: true, showPreviewIcon: false }"
-              accept="image/*,application/json"
-              :customRequest="() => {}"
+        accept="image/*,application/json"
+        :customRequest="() => {}"
               class="bg-white/5 border-white/20 rounded-xl"
-            >
+      >
               <p class="ant-upload-drag-icon text-white/60">
                 <InboxOutlined class="text-4xl" />
-              </p>
+        </p>
               <p class="ant-upload-text text-white">{{ t('ipfsUpload.dragFileHere') }}</p>
               <p class="ant-upload-hint text-white/70">
                 {{ t('ipfsUpload.supportSingleFile') }}
-              </p>
-            </a-upload-dragger>
-            
+        </p>
+      </a-upload-dragger>
+      
             <div class="mt-4">
-              <a-button
-                type="primary"
-                :loading="uploading"
-                @click="handleFileUpload"
+        <a-button 
+          type="primary" 
+          :loading="uploading" 
+          @click="handleFileUpload"
                 :disabled="fileList.length === 0 || !apiKeyValid"
                 size="large"
                 block
@@ -542,37 +546,37 @@ defineOptions({
                   <UploadOutlined />
                 </template>
                 {{ uploading ? t('ipfsUpload.uploading') : t('ipfsUpload.upload') }}
-              </a-button>
-            </div>
-          </div>
-
-          <!-- JSON编辑模式 -->
+        </a-button>
+      </div>
+    </div>
+    
+    <!-- JSON编辑模式 -->
           <div v-else>
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('ipfsUpload.jsonContent') }} <span class="text-red-400">*</span>
             </label>
-            <a-textarea
-              v-model:value="jsonContent"
+      <a-textarea
+        v-model:value="jsonContent"
               :rows="12"
-              :placeholder="t('ipfsUpload.jsonContentPlaceholder')"
+              :placeholder="t('ipfsUpload.jsonContentPlaceholder') === '请输入JSON内容' ? `${t('ipfsUpload.jsonContentPlaceholder')}，例如：\n${jsonExample}` : `${t('ipfsUpload.jsonContentPlaceholder')}, e.g.:\n${jsonExample}`"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': jsonContent }"
-            />
-            
+      />
+      
             <div v-if="isEditingUploadedJson" class="mt-4 p-4 bg-[rgba(250,173,20,0.1)] rounded-xl border border-[rgba(250,173,20,0.2)]">
               <a-checkbox v-model:checked="keepOriginalUrl" class="text-white/90">
                 {{ t('ipfsUpload.keepOriginalUrl') }}
-              </a-checkbox>
+        </a-checkbox>
               <div class="mt-2 text-xs text-white/70">
                 {{ t('ipfsUpload.keepOriginalUrlDesc') }}
-              </div>
-            </div>
-            
+        </div>
+      </div>
+      
             <div class="mt-4">
-              <a-button
-                type="primary"
-                :loading="uploading"
-                @click="handleJsonUpload"
+        <a-button 
+          type="primary" 
+          :loading="uploading" 
+          @click="handleJsonUpload"
                 :disabled="!apiKeyValid"
                 size="large"
                 block
@@ -581,11 +585,11 @@ defineOptions({
                   <UploadOutlined />
                 </template>
                 {{ uploading ? t('ipfsUpload.uploading') : (isEditingUploadedJson ? t('ipfsUpload.update') : t('ipfsUpload.upload')) }}
-              </a-button>
-            </div>
-          </div>
-
-          <!-- 上传结果 -->
+        </a-button>
+      </div>
+    </div>
+    
+    <!-- 上传结果 -->
           <div v-if="uploadStatus === 'success'" class="space-y-4">
             <div class="flex items-center gap-3 p-4 bg-[rgba(82,196,26,0.1)] rounded-xl border border-[rgba(82,196,26,0.2)]">
               <CheckCircleOutlined class="text-[#52c41a] text-xl" />
@@ -622,10 +626,10 @@ defineOptions({
                     <GlobalOutlined />
                   </template>
                   {{ t('ipfsUpload.convert') }}
-                </a-button>
-              </div>
-            </div>
-            
+          </a-button>
+        </div>
+      </div>
+      
             <!-- 实际新URL（如果有） -->
             <div v-if="actualNewUrl" class="bg-[rgba(250,173,20,0.1)] rounded-xl p-4 border border-[rgba(250,173,20,0.2)]">
               <div class="flex items-center gap-2 mb-2">
@@ -649,25 +653,25 @@ defineOptions({
                   class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
                   {{ t('ipfsUpload.use') }}
                 </a-button>
-              </div>
+        </div>
               <div class="text-xs text-white/70">
                 {{ t('ipfsUpload.actualNewUrlDesc') }}
-              </div>
-            </div>
-            
-            <!-- 已上传的JSON内容 -->
+        </div>
+      </div>
+      
+      <!-- 已上传的JSON内容 -->
             <div v-if="uploadedJsonContent !== null" class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="m-0 text-base font-semibold text-white">{{ t('ipfsUpload.uploadedJsonContent') }}</h3>
-                <a-button
+          <a-button 
                   type="text"
-                  @click="editUploadedJson"
+            @click="editUploadedJson"
                   class="flex items-center justify-center text-white px-4 py-2.5 h-auto transition-all duration-300 ease-in-out hover:text-solana-green">
                   <template #icon>
                     <EditOutlined />
                   </template>
                   {{ t('ipfsUpload.editAndReupload') }}
-                </a-button>
+          </a-button>
               </div>
               <pre class="text-xs text-white/80 font-mono bg-white/5 rounded-lg p-4 border border-white/10 overflow-auto max-h-64">{{ JSON.stringify(uploadedJsonContent, null, 2) }}</pre>
             </div>
@@ -842,4 +846,4 @@ defineOptions({
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: rgba(255, 255, 255, 0.4) !important;
 }
-</style>
+</style> 

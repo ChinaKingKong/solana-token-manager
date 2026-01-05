@@ -21,6 +21,7 @@ interface TokenData {
   price?: number;
   value?: number;
   change24h?: number;
+  slot?: number; // 账户创建时的 slot，用于排序
 }
 
 // 使用钱包Hook
@@ -44,7 +45,7 @@ const loading = ref(false);
 
 // 分页相关
 const currentPage = ref(1);
-const pageSize = ref(6); // 每页显示6个代币（2行x3列，或3行x2列）
+const pageSize = ref(8); // 每页显示8个代币
 
 // 计算分页后的代币列表
 const paginatedTokens = computed(() => {
@@ -220,11 +221,42 @@ const fetchTokenList = async () => {
           ata: pubkeyString,
           balance: parseFloat(tokenAmount.uiAmount || '0'),
           decimals: tokenAmount.decimals,
+          slot: 0, // 初始化为 0，稍后获取
         });
       } catch (error) {
         // 忽略单个代币账户处理错误
       }
     }
+
+    // 获取每个 mint 账户的创建 slot（用于按创建时间排序）
+    // 通过获取 mint 账户的签名历史来找到创建时间
+    const slotPromises = tokenList.map(async (token) => {
+      try {
+        const mintPubkey = new PublicKey(token.mint);
+        // 获取 mint 账户的签名历史，第一个签名就是创建时的签名
+        const signatures = await conn.getSignaturesForAddress(mintPubkey, { limit: 1 });
+        if (signatures && signatures.length > 0) {
+          return { mint: token.mint, slot: signatures[0].slot };
+        }
+        return { mint: token.mint, slot: 0 };
+      } catch (error) {
+        return { mint: token.mint, slot: 0 };
+      }
+    });
+
+    const slotResults = await Promise.all(slotPromises);
+    const slotMap = new Map<string, number>();
+    slotResults.forEach((result) => {
+      slotMap.set(result.mint, result.slot);
+    });
+
+    // 更新 tokenList 中的 slot
+    tokenList.forEach((token) => {
+      token.slot = slotMap.get(token.mint) || 0;
+    });
+
+    // 按 slot 倒序排序（slot 越大表示创建时间越新）
+    tokenList.sort((a, b) => (b.slot || 0) - (a.slot || 0));
 
     tokens.value = tokenList;
 
@@ -674,12 +706,16 @@ defineOptions({
       </div>
 
       <!-- 分页组件 -->
-      <div v-if="tokens.length > pageSize" class="mt-4 flex justify-center">
-        <a-pagination v-model:current="currentPage" :total="tokens.length" :page-size="pageSize"
-          :show-size-changer="false" :show-quick-jumper="true"
+      <div v-if="tokens.length > pageSize" class="mt-6 flex justify-center">
+        <a-pagination
+          v-model:current="currentPage"
+          :total="tokens.length"
+          :page-size="pageSize"
+          :show-size-changer="false"
+          :show-quick-jumper="true"
           :show-total="(total: number, range: [number, number]) => t('tokenList.paginationTotal', { total, start: range[0], end: range[1] })"
           @change="handlePageChange"
-          class="[&_.ant-pagination-item]:bg-white/10 [&_.ant-pagination-item]:border-white/20 [&_.ant-pagination-item]:text-white [&_.ant-pagination-item:hover]:border-solana-green [&_.ant-pagination-item-active]:bg-solana-green [&_.ant-pagination-item-active]:border-solana-green [&_.ant-pagination-prev]:text-white [&_.ant-pagination-next]:text-white [&_.ant-pagination-jump-prev]:text-white [&_.ant-pagination-jump-next]:text-white" />
+          class="[&_.ant-pagination-item]:bg-white/10 [&_.ant-pagination-item]:border-white/20 [&_.ant-pagination-item]:text-white [&_.ant-pagination-item:hover]:border-solana-green [&_.ant-pagination-item-active]:bg-solana-green [&_.ant-pagination-item-active]:border-solana-green [&_.ant-pagination-prev]:text-white [&_.ant-pagination-next]:text-white [&_.ant-pagination-jump-prev]:text-white [&_.ant-pagination-jump-next]:text-white [&_.ant-pagination-total-text]:text-white [&_.ant-pagination-options]:text-white [&_.ant-pagination-options-quick-jumper]:text-white [&_.ant-pagination-options-quick-jumper_input]:text-white" />
       </div>
     </div>
 
@@ -800,6 +836,74 @@ defineOptions({
   .token-card .flex.items-start > div:first-child {
     margin-bottom: 8px;
   }
+}
+
+/* 分页组件样式 - 与交易历史页面保持一致 */
+:deep(.ant-pagination) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-item) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-item a) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-prev),
+:deep(.ant-pagination-next),
+:deep(.ant-pagination-jump-prev),
+:deep(.ant-pagination-jump-next) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-prev a),
+:deep(.ant-pagination-next a),
+:deep(.ant-pagination-jump-prev a),
+:deep(.ant-pagination-jump-next a) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-prev .anticon),
+:deep(.ant-pagination-next .anticon),
+:deep(.ant-pagination-jump-prev .anticon),
+:deep(.ant-pagination-jump-next .anticon) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-prev:hover .anticon),
+:deep(.ant-pagination-next:hover .anticon),
+:deep(.ant-pagination-jump-prev:hover .anticon),
+:deep(.ant-pagination-jump-next:hover .anticon) {
+  color: rgba(255, 255, 255, 1) !important;
+}
+
+:deep(.ant-pagination-total-text) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-options) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-options-quick-jumper) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-options-quick-jumper input) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-pagination-options-quick-jumper input::placeholder) {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+:deep(.ant-pagination-options-quick-jumper input:focus) {
+  border-color: #14f195 !important;
+  box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;
 }
 
 </style>

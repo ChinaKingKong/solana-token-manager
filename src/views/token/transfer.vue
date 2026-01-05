@@ -3,8 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { useI18n } from 'vue-i18n';
 import { PublicKey, Transaction } from '@solana/web3.js';
-import {
-  getOrCreateAssociatedTokenAccount,
+import { 
   getAccount,
   getMint,
   getAssociatedTokenAddress,
@@ -20,6 +19,7 @@ import {
   GlobalOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+import MintAddressInput from '../../components/MintAddressInput.vue';
 
 const { t } = useI18n();
 
@@ -274,7 +274,6 @@ const handleTransfer = async () => {
     transferAmount.value = '';
     recipientAddress.value = '';
   } catch (error: any) {
-    console.error('转账失败:', error);
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
@@ -382,14 +381,10 @@ defineOptions({
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('transferToken.mintAddress') }} <span class="text-red-400">*</span>
             </label>
-            <a-input
-              v-model:value="tokenMintAddress"
-              :placeholder="t('transferToken.mintAddressPlaceholder')"
-              size="large"
-              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
-              :class="{ '!border-solana-green': tokenMintAddress }"
+            <MintAddressInput
+              v-model="tokenMintAddress"
+              :desc="t('transferToken.mintAddressDesc')"
             />
-            <div class="mt-1.5 text-xs text-white/50">{{ t('transferToken.mintAddressDesc') }}</div>
           </div>
 
           <!-- 代币信息显示 -->
@@ -582,7 +577,8 @@ defineOptions({
 
 :deep(.ant-input:focus),
 :deep(.ant-input-focused),
-:deep(.ant-input-number-focused .ant-input-number-input) {
+:deep(.ant-input-number-focused .ant-input-number-input),
+:deep(.ant-select-focused .ant-select-selector) {
   background-color: rgba(255, 255, 255, 0.08) !important;
   border-color: #14f195 !important;
   box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;

@@ -1,13 +1,13 @@
 {
-  "name": "Mask Token",
-  "symbol": "MKT",
-  "description": "Mask Token on Solana",
-  "image": "https://www.stableflow.app/images/WUSD.png",
-  "external_url": "https://www.stableflow.app",
+  "name": "Test4",
+  "symbol": "T4",
+  "description": "Test4 Token on Solana",
+  "image": "https://youke3.picui.cn/s1/2026/01/05/695b823313055.jpeg",
+  "external_url": "https://www.solana.io",
   "attributes": [
     {
       "trait_type": "Type",
-      "value": "Mask Token"
+      "value": "Test4 Token"
     },
     {
       "trait_type": "Network",

@@ -103,10 +103,9 @@ const fetchTransactionHistory = async () => {
 
     transactions.value = transactionDetails;
     currentPage.value = 1; // 重置到第一页
-    message.success(t('transactionHistory.loadSuccess'));
+    message.success(t('transactionHistory.loadSuccess', { count: transactionDetails.length }));
   } catch (error) {
     message.error(t('transactionHistory.loadFailed'));
-    console.error(error);
   } finally {
     loading.value = false;
   }
@@ -152,7 +151,6 @@ const viewTransactionDetail = async (signature: string) => {
     };
   } catch (error) {
     message.error(t('transactionHistory.fetchDetailFailed'));
-    console.error('获取交易详情失败:', error);
     // 即使失败也显示基本信息
     selectedTransaction.value = {
       signature,
@@ -457,29 +455,29 @@ defineOptions({
           <!-- 标题和刷新按钮 -->
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 class="m-0 text-2xl font-semibold text-white">{{ t('transactionHistory.title') }}</h2>
-            <a-button
-              type="primary"
-              :loading="loading"
-              @click="fetchTransactionHistory"
+      <a-button
+        type="primary"
+        :loading="loading"
+        @click="fetchTransactionHistory"
               class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-2.5 h-auto text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300">
-              <template #icon>
-                <ReloadOutlined />
-              </template>
+        <template #icon>
+          <ReloadOutlined />
+        </template>
               {{ t('transactionHistory.refresh') }}
-            </a-button>
-          </div>
+      </a-button>
+    </div>
 
-          <!-- 交易统计 -->
+      <!-- 交易统计 -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center gap-3">
                 <div class="w-12 h-12 rounded-xl flex items-center justify-center bg-white/10">
                   <HistoryOutlined class="text-2xl text-solana-green" />
-                </div>
+      </div>
                 <div>
                   <div class="text-xs font-medium text-white/60 mb-1">{{ t('transactionHistory.total') }}</div>
                   <div class="text-2xl font-bold text-white">{{ stats.total }}</div>
-                </div>
+              </div>
               </div>
             </div>
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
@@ -532,31 +530,31 @@ defineOptions({
                     <component :is="getStatus(tx).icon" :class="`text-${getStatus(tx).color === 'error' ? 'red' : getStatus(tx).color === 'success' ? 'green' : 'blue'}-400`" />
                     <a-tag :color="getStatus(tx).color">
                       {{ getStatus(tx).text }}
-                    </a-tag>
+              </a-tag>
                     <a-tag>{{ getTransactionType(tx) }}</a-tag>
                   </div>
                   <div class="flex items-center gap-2 mb-1">
                     <code class="text-xs text-white/70 font-mono">{{ formatAddress(tx.signature) }}</code>
-                    <a-button
+                <a-button
                       type="text"
-                      size="small"
+                  size="small"
                       @click.stop="copySignature(tx.signature)"
                       class="p-0 h-auto text-white/50 hover:text-white">
                       <template #icon>
                         <CopyOutlined />
                       </template>
-                    </a-button>
+                </a-button>
                   </div>
                   <div class="text-xs text-white/50">{{ formatTime(tx.blockTime) }}</div>
                 </div>
                 <div class="flex items-center gap-2">
-                  <a-button
-                    size="small"
+                <a-button
+                  size="small"
                     @click.stop="viewOnExplorer(tx.signature)"
                     class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
                     <template #icon>
                       <GlobalOutlined />
-                    </template>
+            </template>
                     {{ t('transactionHistory.viewOnSolscan') }}
                   </a-button>
                 </div>
@@ -635,10 +633,10 @@ defineOptions({
               </div>
               <div>
                 <div class="text-xs font-medium text-white/60 mb-2">{{ t('transactionHistory.detailStatus') }}</div>
-                <a-tag :color="getStatus(selectedTransaction).color">
+            <a-tag :color="getStatus(selectedTransaction).color">
                   <component :is="getStatus(selectedTransaction).icon" class="mr-1" />
-                  {{ getStatus(selectedTransaction).text }}
-                </a-tag>
+              {{ getStatus(selectedTransaction).text }}
+            </a-tag>
               </div>
               <div>
                 <div class="text-xs font-medium text-white/60 mb-2">Slot</div>
@@ -742,7 +740,7 @@ defineOptions({
                   <div class="flex items-center gap-3">
                     <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.tokenAddress') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).mint }}</code>
-                  </div>
+        </div>
                   <div class="flex items-center gap-3">
                     <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.account') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).account }}</code>

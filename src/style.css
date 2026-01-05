@@ -195,7 +195,7 @@ body {
   background: rgba(26, 34, 53, 0.8) !important;
   border-bottom-color: rgba(255, 255, 255, 0.1) !important;
   color: #ffffff !important;
-}
+  }
 
 :deep(.ant-table-tbody > tr > td) {
   border-bottom-color: rgba(255, 255, 255, 0.05) !important;
@@ -210,7 +210,7 @@ body {
   background: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: rgba(255, 255, 255, 0.85) !important;
-}
+  }
 
 /* 描述列表样式 */
 :deep(.ant-descriptions-item-label) {
@@ -220,7 +220,7 @@ body {
 
 :deep(.ant-descriptions-item-content) {
   color: rgba(255, 255, 255, 0.85) !important;
-}
+  }
 
 /* 分割线样式 */
 :deep(.ant-divider) {

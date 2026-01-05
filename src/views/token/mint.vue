@@ -4,8 +4,7 @@ import { message } from 'ant-design-vue';
 import { useI18n } from 'vue-i18n';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import {
-  getOrCreateAssociatedTokenAccount,
-  mintTo,
+  getOrCreateAssociatedTokenAccount, 
   getMint,
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
@@ -13,15 +12,13 @@ import {
   createMintToCheckedInstruction,
 } from '@solana/spl-token';
 import {
-  ToolOutlined,
-  CopyOutlined,
+  ToolOutlined, 
   InfoCircleOutlined,
   WalletOutlined,
-  ReloadOutlined,
-  CheckCircleOutlined,
-  GlobalOutlined,
+  ReloadOutlined, 
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+import MintAddressInput from '../../components/MintAddressInput.vue';
 
 const { t } = useI18n();
 
@@ -92,6 +89,13 @@ const fetchTokenInfo = async () => {
     return;
   }
 
+  // 验证地址格式
+  if (!isValidSolanaAddress(tokenMintAddress.value)) {
+    // 地址格式无效时不显示错误，让用户手动输入
+    tokenInfo.value = null;
+    return;
+  }
+
   loadingInfo.value = true;
   try {
     const mintPubkey = new PublicKey(tokenMintAddress.value);
@@ -106,7 +110,8 @@ const fetchTokenInfo = async () => {
 
     decimals.value = mintInfo.decimals;
   } catch (error: any) {
-    message.error(`${t('mintToken.mintFailed')}: ${error.message || t('mintToken.mintAddressRequired')}`);
+    // 静默处理错误，不显示错误提示，因为可能是地址刚创建还未完全确认
+    // 用户可以手动点击刷新按钮来获取信息
     tokenInfo.value = null;
   } finally {
     loadingInfo.value = false;
@@ -119,22 +124,39 @@ const fetchCurrentBalance = async () => {
     return;
   }
 
+  // 验证地址格式
+  if (!isValidSolanaAddress(tokenMintAddress.value)) {
+    currentBalance.value = 0;
+    return;
+  }
+
   loadingBalance.value = true;
   try {
     const mintPubkey = new PublicKey(tokenMintAddress.value);
     const ownerPubkey = walletState.value.publicKey;
 
-    // 获取或创建关联代币账户
-    const tokenAccount = await getOrCreateAssociatedTokenAccount(
-      connection.value,
-      walletState.value.wallet!,
-      mintPubkey,
-      ownerPubkey
-    );
-
-    currentBalance.value = Number(tokenAccount.amount) / Math.pow(10, decimals.value);
+    // 先尝试获取账户，如果不存在则不创建（避免在页面加载时自动创建账户）
+    try {
+      const tokenAccountAddress = await getAssociatedTokenAddress(mintPubkey, ownerPubkey);
+      const tokenAccount = await getAccount(connection.value, tokenAccountAddress);
+      currentBalance.value = Number(tokenAccount.amount) / Math.pow(10, decimals.value);
+    } catch (accountError: any) {
+      // 如果账户不存在，余额为 0，不显示错误（这是正常情况）
+      // TokenAccountNotFoundError 是正常情况，新创建的代币可能还没有关联代币账户
+      if (
+        accountError.message?.includes('AccountNotFound') || 
+        accountError.message?.includes('InvalidAccountData') ||
+        accountError.name === 'TokenAccountNotFoundError' ||
+        accountError.constructor?.name === 'TokenAccountNotFoundError'
+      ) {
+        currentBalance.value = 0;
+      } else {
+        // 其他错误静默处理
+        currentBalance.value = 0;
+      }
+    }
   } catch (error: any) {
-    message.error(`${t('common.error')}: ${error.message || t('common.error')}`);
+    // 静默处理错误，不显示错误提示，因为可能是地址刚创建还未完全确认
     currentBalance.value = 0;
   } finally {
     loadingBalance.value = false;
@@ -210,7 +232,7 @@ const handleMint = async () => {
           targetPubkey, // owner (账户所有者)
           mintPubkey // mint
         )
-      );
+    );
     }
 
     // 计算铸造数量(考虑小数位)
@@ -220,7 +242,7 @@ const handleMint = async () => {
     // 注意：mint authority 必须是当前连接的钱包（拥有铸币权限的地址）
     transaction.add(
       createMintToCheckedInstruction(
-        mintPubkey,
+      mintPubkey,
         associatedTokenAddress,
         payerPubkey, // mint authority (必须是拥有铸币权限的地址)
         amountToMint,
@@ -246,7 +268,6 @@ const handleMint = async () => {
     // 清空铸造数量
     mintAmount.value = '';
   } catch (error: any) {
-    console.error('铸造代币失败:', error);
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
@@ -281,8 +302,9 @@ const viewOnSolscan = (mint: string) => {
 // 监听Mint地址变化
 watch(() => tokenMintAddress.value, (newValue) => {
   if (newValue && newValue.trim()) {
-    fetchTokenInfo();
+    // 只有在钱包连接时才获取信息，避免显示错误提示
     if (walletState.value?.connected) {
+      fetchTokenInfo();
       fetchCurrentBalance();
     }
   } else {
@@ -304,9 +326,19 @@ watch(() => walletState.value?.connected, (isConnected) => {
 onMounted(() => {
   const savedMintAddress = localStorage.getItem('mint-token-address');
   if (savedMintAddress) {
-    tokenMintAddress.value = savedMintAddress;
-    // 清除 localStorage 中的地址，避免下次进入时自动填充
-    localStorage.removeItem('mint-token-address');
+    // 使用 nextTick 确保在组件完全挂载后再设置地址，避免触发不必要的错误
+    setTimeout(() => {
+      tokenMintAddress.value = savedMintAddress;
+      // 清除 localStorage 中的地址，避免下次进入时自动填充
+      localStorage.removeItem('mint-token-address');
+      // 如果钱包已连接，延迟一下再获取信息，确保页面完全加载
+      if (walletState.value?.connected) {
+        setTimeout(() => {
+          fetchTokenInfo();
+          fetchCurrentBalance();
+        }, 100);
+      }
+    }, 0);
   }
 });
 
@@ -342,17 +374,13 @@ defineOptions({
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('mintToken.mintAddress') }} <span class="text-red-400">*</span>
             </label>
-            <a-input
-              v-model:value="tokenMintAddress"
-              :placeholder="t('mintToken.mintAddressPlaceholder')"
-              size="large"
-              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
-              :class="{ '!border-solana-green': tokenMintAddress }"
+            <MintAddressInput
+              v-model="tokenMintAddress"
+              :desc="t('mintToken.mintAddressDesc')"
             />
-            <div class="mt-1.5 text-xs text-white/50">{{ t('mintToken.mintAddress') }}</div>
           </div>
 
-          <!-- 代币信息显示 -->
+      <!-- 代币信息显示 -->
           <div v-if="tokenInfo" class="space-y-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
@@ -365,7 +393,7 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  {{ t('common.loading') }}
+                  {{ t('tokenList.refresh') }}
                 </a-button>
               </div>
               <div class="grid grid-cols-2 gap-4">
@@ -392,22 +420,22 @@ defineOptions({
                   </div>
                 </div>
               </div>
-            </div>
+      </div>
 
-            <!-- 当前余额 -->
+      <!-- 当前余额 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-white/80">{{ t('mintToken.currentBalance') }}</span>
-                <a-button
+            <a-button
                   @click="fetchCurrentBalance"
-                  :loading="loadingBalance"
+              :loading="loadingBalance"
                   size="small"
                   class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
                   <template #icon>
                     <ReloadOutlined />
                   </template>
                   {{ t('mintToken.refresh') }}
-                </a-button>
+            </a-button>
               </div>
               <div class="text-2xl font-bold text-solana-green">
                 {{ currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
@@ -449,23 +477,23 @@ defineOptions({
                 {{ t('mintToken.addressInvalid') }}
               </div>
             </div>
-          </div>
+      </div>
 
           <!-- 铸造数量 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('mintToken.amount') }} <span class="text-red-400">*</span>
             </label>
-            <a-input-number
-              v-model:value="mintAmount"
-              :min="0"
-              :precision="decimals"
-              :step="Math.pow(10, -decimals)"
+        <a-input-number
+          v-model:value="mintAmount"
+          :min="0"
+          :precision="decimals"
+          :step="Math.pow(10, -decimals)"
               size="large"
               class="w-full bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': mintAmount }"
               :placeholder="t('mintToken.amountPlaceholder')"
-            />
+        />
             <div class="mt-1.5 text-xs text-white/50">{{ t('mintToken.maxDecimals', { decimals }) }}</div>
           </div>
 
@@ -488,19 +516,19 @@ defineOptions({
 
           <!-- 铸造按钮 -->
           <div class="pt-2">
-            <a-button
-              type="primary"
-              :loading="minting"
-              :disabled="!isFormValid"
-              @click="handleMint"
+          <a-button
+            type="primary"
+            :loading="minting"
+            :disabled="!isFormValid"
+            @click="handleMint"
               size="large"
               block
               class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
-              <template #icon>
+            <template #icon>
                 <ToolOutlined />
-              </template>
+            </template>
               {{ minting ? t('mintToken.minting') : t('mintToken.mint') }}
-            </a-button>
+          </a-button>
           </div>
         </div>
       </div>
@@ -513,28 +541,47 @@ defineOptions({
   from {
     opacity: 0;
     transform: translateY(10px);
-  }
+}
 
   to {
     opacity: 1;
     transform: translateY(0);
-  }
+}
 }
 
-/* 输入框样式覆盖 */
+/* 输入框和下拉框样式覆盖 */
 :deep(.ant-input),
-:deep(.ant-input-number-input) {
+:deep(.ant-input-number-input),
+:deep(.ant-select-selector),
+:deep(.ant-input-affix-wrapper) {
   background-color: rgba(255, 255, 255, 0.05) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: rgba(255, 255, 255, 0.9) !important;
 }
 
+:deep(.ant-select-selection-search-input),
+:deep(.ant-input-affix-wrapper .ant-input) {
+  color: rgba(255, 255, 255, 0.9) !important;
+  background-color: transparent !important;
+}
+
+:deep(.ant-select-selection-placeholder),
+:deep(.ant-input-affix-wrapper .ant-input::placeholder) {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
 :deep(.ant-input:focus),
 :deep(.ant-input-focused),
-:deep(.ant-input-number-focused .ant-input-number-input) {
+:deep(.ant-input-number-focused .ant-input-number-input),
+:deep(.ant-select-focused .ant-select-selector),
+:deep(.ant-input-affix-wrapper-focused) {
   background-color: rgba(255, 255, 255, 0.08) !important;
   border-color: #14f195 !important;
   box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;
+}
+
+:deep(.ant-input-affix-wrapper-focused .ant-input) {
+  background-color: transparent !important;
 }
 
 :deep(.ant-input::placeholder),
@@ -553,6 +600,61 @@ defineOptions({
 
 :deep(.ant-input-number-handler:hover) {
   color: rgba(255, 255, 255, 1) !important;
+}
+
+/* 清除图标样式 - 圆角处理 */
+:deep(.ant-input-clear-icon),
+:deep(.ant-input-affix-wrapper .ant-input-clear-icon) {
+  background: transparent !important;
+  background-color: transparent !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  width: 20px !important;
+  height: 20px !important;
+  transition: all 0.2s ease !important;
+}
+
+:deep(.ant-input-clear-icon:hover),
+:deep(.ant-input-affix-wrapper .ant-input-clear-icon:hover) {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+:deep(.ant-input-clear-icon .anticon),
+:deep(.ant-input-affix-wrapper .ant-input-clear-icon .anticon) {
+  border-radius: 50% !important;
+  width: 16px !important;
+  height: 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* AutoComplete 下拉选项样式 */
+:deep(.ant-select-dropdown),
+:deep(.ant-cascader-dropdown) {
+  background: rgba(26, 34, 53, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:deep(.ant-select-item),
+:deep(.ant-cascader-menu-item) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-select-item-option-selected) {
+  background: rgba(20, 241, 149, 0.2) !important;
+  color: #14f195 !important;
+}
+
+:deep(.ant-select-item-option-active:not(.ant-select-item-option-disabled)) {
+  background: rgba(20, 241, 149, 0.1) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+:deep(.ant-select-item-option-content) {
+  color: inherit !important;
 }
 
 /* 按钮样式覆盖 */

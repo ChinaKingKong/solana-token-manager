@@ -11,8 +11,7 @@ import {
 } from '@solana/spl-token';
 import {
   FireOutlined,
-  CopyOutlined,
-  InfoCircleOutlined,
+  CopyOutlined, 
   WalletOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
@@ -20,6 +19,7 @@ import {
   ExclamationCircleOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+import MintAddressInput from '../../components/MintAddressInput.vue';
 
 const { t } = useI18n();
 
@@ -91,7 +91,6 @@ const fetchTokenInfo = async () => {
     await fetchCurrentBalance();
   } catch (error: any) {
     message.error(`${t('burnToken.fetchTokenInfoFailed')}: ${error.message || t('burnToken.checkMintAddress')}`);
-    console.error('获取代币信息失败:', error);
     tokenInfo.value = null;
     currentBalance.value = 0;
     ownerATA.value = '';
@@ -122,14 +121,13 @@ const fetchCurrentBalance = async () => {
     // 获取账户余额
     try {
       const accountInfo = await getAccount(connection.value, ataAddress);
-      currentBalance.value = Number(accountInfo.amount) / Math.pow(10, decimals.value);
+    currentBalance.value = Number(accountInfo.amount) / Math.pow(10, decimals.value);
     } catch (error: any) {
       // 账户不存在
       currentBalance.value = 0;
     }
   } catch (error: any) {
     message.error(`${t('burnToken.fetchBalanceFailed')}: ${error.message || t('burnToken.unknownError')}`);
-    console.error('获取余额失败:', error);
     currentBalance.value = 0;
     ownerATA.value = '';
   } finally {
@@ -206,13 +204,58 @@ const executeBurn = async () => {
     );
 
     // 获取最近的区块哈希
-    const { blockhash } = await conn.getLatestBlockhash();
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('finalized');
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = ownerPubkey;
 
-    // 发送并确认交易
-    const signature = await wallet.sendTransaction(transaction, conn);
-    await conn.confirmTransaction(signature, 'confirmed');
+    // 验证钱包适配器是否有效
+    if (!wallet || typeof wallet.sendTransaction !== 'function') {
+      message.error(t('wallet.connectWallet'));
+      return;
+    }
+
+    // 检查钱包适配器的连接状态
+    if (wallet.connected === false || !wallet.publicKey) {
+      message.error(t('wallet.connectWallet'));
+      return;
+    }
+
+    // 尝试发送交易
+    let signature: string;
+    
+    try {
+      // 方法1: 直接发送（标准方式）
+      signature = await wallet.sendTransaction(transaction, conn);
+    } catch (sendError: any) {
+      // 如果直接发送失败，尝试先签名再发送
+      // 检查钱包是否支持 signTransaction
+      if (typeof wallet.signTransaction === 'function') {
+        try {
+          // 方法2: 先签名再发送
+          const signedTransaction = await wallet.signTransaction(transaction);
+          signature = await conn.sendRawTransaction(signedTransaction.serialize(), {
+            skipPreflight: false,
+            maxRetries: 3,
+          });
+        } catch (signError: any) {
+          throw sendError; // 抛出原始错误
+        }
+      } else {
+        // 钱包不支持 signTransaction，抛出原始错误
+        throw sendError;
+      }
+    }
+
+    // 等待确认
+    const confirmation = await conn.confirmTransaction({
+      signature,
+      blockhash,
+      lastValidBlockHeight,
+    }, 'confirmed');
+
+    if (confirmation.value.err) {
+      throw new Error(`${t('burnToken.burnFailed')}: ${JSON.stringify(confirmation.value.err)}`);
+    }
 
     burnTransactionSignature.value = signature;
     burnSuccess.value = true;
@@ -225,7 +268,6 @@ const executeBurn = async () => {
     // 清空表单
     burnAmount.value = '';
   } catch (error: any) {
-    console.error('销毁代币失败:', error);
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
@@ -234,8 +276,14 @@ const executeBurn = async () => {
       message.error(t('wallet.connectWallet'));
     } else if (error.message?.includes('insufficient funds') || error.message?.includes('Insufficient funds')) {
       message.error(t('burnToken.insufficientBalance'));
+    } else if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
+      message.error(t('burnToken.burnFailed'));
+    } else if (error.name === 'WalletSendTransactionError' || error.message?.includes('Unexpected error')) {
+      // 处理 WalletSendTransactionError，提供更友好的错误提示
+      message.error(t('burnToken.burnFailed') + ': ' + (t('common.error') || '交易发送失败，请检查网络连接或重试'));
     } else {
-      message.error(`${t('burnToken.burnFailed')}: ${error.message || t('common.error')}`);
+      const errorMsg = error.message || error.toString() || t('common.error');
+      message.error(`${t('burnToken.burnFailed')}: ${errorMsg}`);
     }
   } finally {
     burning.value = false;
@@ -245,7 +293,7 @@ const executeBurn = async () => {
 // 设置最大销毁金额
 const setMaxAmount = () => {
   if (currentBalance.value > 0) {
-    burnAmount.value = currentBalance.value.toString();
+  burnAmount.value = currentBalance.value.toString();
   }
 };
 
@@ -341,28 +389,31 @@ defineOptions({
 
           <div class="space-y-4">
             <!-- 交易签名 -->
-            <div v-if="burnTransactionSignature" class="bg-white/5 rounded-xl p-4 border border-white/10">
-              <div class="flex items-center gap-2 mb-2">
+            <div v-if="burnTransactionSignature" class="bg-white/5 rounded-xl p-4 border border-white/10 relative">
+              <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-white/80">{{ t('burnToken.transactionSignature') }}</span>
+                <a-button
+                  type="text"
+                  size="small"
+                  @click="viewTransaction(burnTransactionSignature)"
+                  class="flex items-center justify-center text-white px-2 py-1 h-auto transition-all duration-300 ease-in-out hover:text-solana-green flex-shrink-0">
+                  <template #icon>
+                    <GlobalOutlined />
+                  </template>
+                  {{ t('transactionHistory.viewOnSolscan') }}
+                </a-button>
               </div>
-              <div class="flex items-center gap-2">
-                <div
-                  class="flex-1 px-4 py-2.5 bg-white/5 rounded-lg border border-white/10 text-sm font-mono text-white/90 break-all">
-                  {{ burnTransactionSignature }}
-                </div>
-                <a-button @click="copyAddress(burnTransactionSignature)"
-                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+              <div class="flex items-center gap-2 bg-white/5 rounded-xl p-3 border border-white/10">
+                <code class="text-sm text-white/90 font-mono break-all flex-1 min-w-0">{{ burnTransactionSignature }}</code>
+                <a-button
+                  type="text"
+                  size="small"
+                  @click="copyAddress(burnTransactionSignature)"
+                  class="flex items-center justify-center text-white px-2 py-1 h-auto transition-all duration-300 ease-in-out hover:text-solana-green flex-shrink-0">
                   <template #icon>
                     <CopyOutlined />
                   </template>
                   {{ t('common.copy') }}
-                </a-button>
-                <a-button @click="viewTransaction(burnTransactionSignature)"
-                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
-                  <template #icon>
-                    <GlobalOutlined />
-                  </template>
-                  Solscan
                 </a-button>
               </div>
             </div>
@@ -409,17 +460,13 @@ defineOptions({
             <label class="block text-sm font-medium text-white/90 mb-2">
               {{ t('burnToken.mintAddress') }} <span class="text-red-400">*</span>
             </label>
-            <a-input
-              v-model:value="tokenMintAddress"
-              :placeholder="t('burnToken.mintAddressPlaceholder')"
-              size="large"
-              class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
-              :class="{ '!border-solana-green': tokenMintAddress }"
+            <MintAddressInput
+              v-model="tokenMintAddress"
+              :desc="t('burnToken.mintAddressDesc')"
             />
-            <div class="mt-1.5 text-xs text-white/50">{{ t('burnToken.mintAddressDesc') }}</div>
           </div>
 
-          <!-- 代币信息显示 -->
+      <!-- 代币信息显示 -->
           <div v-if="tokenInfo" class="space-y-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
@@ -458,22 +505,22 @@ defineOptions({
                   </div>
                 </div>
               </div>
-            </div>
+      </div>
 
-            <!-- 当前余额 -->
+      <!-- 当前余额 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-sm font-medium text-white/80">{{ t('burnToken.yourBalance') }}</span>
-                <a-button
+            <a-button
                   @click="fetchCurrentBalance"
-                  :loading="loadingBalance"
+              :loading="loadingBalance"
                   size="small"
                   class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1 text-xs font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
                   <template #icon>
                     <ReloadOutlined />
                   </template>
                   {{ t('burnToken.refresh') }}
-                </a-button>
+            </a-button>
               </div>
               <div class="text-2xl font-bold text-red-400 mb-2">
                 {{ currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
@@ -488,11 +535,11 @@ defineOptions({
                   class="p-0 h-auto text-white/50 hover:text-white">
                   <template #icon>
                     <CopyOutlined />
-                  </template>
+          </template>
                 </a-button>
               </div>
-            </div>
           </div>
+      </div>
 
           <!-- 销毁数量 -->
           <div>
@@ -501,22 +548,22 @@ defineOptions({
             </label>
             <div class="flex items-center gap-2">
               <a-input-number
-                v-model:value="burnAmount"
-                :min="0"
-                :max="currentBalance"
+          v-model:value="burnAmount"
+          :min="0"
+          :max="currentBalance"
                 :precision="decimals"
-                :step="Math.pow(10, -decimals)"
+          :step="Math.pow(10, -decimals)"
                 size="large"
                 class="flex-1 bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
                 :class="{ '!border-solana-green': burnAmount }"
                 :placeholder="t('burnToken.amountPlaceholder')"
               />
-              <a-button
-                @click="setMaxAmount"
+            <a-button
+              @click="setMaxAmount"
                 :disabled="!ownerATA || currentBalance === 0"
                 class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2 h-auto text-sm font-medium rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30 disabled:opacity-50 !text-white">
-                MAX
-              </a-button>
+              MAX
+            </a-button>
             </div>
             <div class="mt-1.5 text-xs text-white/50">
               {{ t('burnToken.maxDecimals', { decimals, balance: currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }) }}
@@ -541,27 +588,27 @@ defineOptions({
                 </ul>
               </div>
             </div>
-          </div>
+        </div>
 
           <!-- 销毁按钮 -->
           <div class="pt-2">
-            <a-button
-              type="primary"
-              danger
-              :loading="burning"
-              :disabled="!isFormValid"
-              @click="handleBurn"
+          <a-button
+            type="primary"
+            danger
+            :loading="burning"
+            :disabled="!isFormValid"
+            @click="handleBurn"
               size="large"
               block
               class="flex items-center justify-center bg-gradient-to-r from-red-500 to-red-600 border-none text-white font-semibold px-6 py-3 h-auto text-[16px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(255,77,79,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
-              <template #icon>
-                <FireOutlined />
-              </template>
+            <template #icon>
+              <FireOutlined />
+            </template>
               {{ burning ? t('burnToken.burning') : t('burnToken.burn') }}
-            </a-button>
+          </a-button>
           </div>
         </div>
-      </div>
+    </div>
     </div>
   </div>
 </template>
@@ -571,12 +618,12 @@ defineOptions({
   from {
     opacity: 0;
     transform: translateY(10px);
-  }
+}
 
   to {
     opacity: 1;
     transform: translateY(0);
-  }
+}
 }
 
 /* 输入框样式覆盖 */

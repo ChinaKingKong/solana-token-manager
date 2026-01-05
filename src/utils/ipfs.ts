@@ -62,7 +62,6 @@ export const uploadFileToIPFS = async (
       url: `https://ipfs.io/ipfs/${result.IpfsHash}`
     };
   } catch (error) {
-    console.error('上传文件到IPFS失败:', error);
     return {
       success: false,
       error
@@ -120,7 +119,6 @@ export const uploadJSONToIPFS = async (
       url: `https://ipfs.io/ipfs/${result.IpfsHash}`
     };
   } catch (error) {
-    console.error('上传JSON到IPFS失败:', error);
     return {
       success: false,
       error
@@ -158,7 +156,6 @@ export const validatePinataCredentials = async (
     // 两种认证方式都返回相同的成功消息
     return data.message === 'Congratulations! You are communicating with the Pinata API!';
   } catch (error) {
-    console.error('验证Pinata凭证失败:', error);
     return false;
   }
 };
@@ -241,8 +238,7 @@ export const updateIPFSContent = async (
         headers: unpinHeaders
       });
     } catch (unpinError) {
-      console.warn('解除原始CID固定失败:', unpinError);
-      // 继续执行，不中断流程
+      // 解除原始CID固定失败，继续执行，不中断流程
     }
     
     // 返回原始URL，而不是新URL
@@ -254,7 +250,6 @@ export const updateIPFSContent = async (
       actualUrl: `https://ipfs.io/ipfs/${result.IpfsHash}` // 保存实际的新URL，但不使用它
     };
   } catch (error) {
-    console.error('更新IPFS内容失败:', error);
     return {
       success: false,
       error

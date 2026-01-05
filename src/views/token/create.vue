@@ -20,6 +20,7 @@ import {
   ToolOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+import { addTokenMint } from '../../composables/useTokenMints';
 
 const { t } = useI18n();
 
@@ -51,7 +52,7 @@ const isFormValid = computed(() => {
   return tokenName.value.trim() !== '' &&
     tokenSymbol.value.trim() !== '' &&
     tokenDecimals.value >= 0 &&
-    tokenDecimals.value <= 9 &&
+         tokenDecimals.value <= 9 && 
     walletState.value?.connected &&
     walletState.value?.publicKey !== null;
 });
@@ -67,14 +68,14 @@ const createToken = async () => {
     message.error(t('wallet.connectWallet'));
     return;
   }
-
+  
   if (!walletState.value?.wallet) {
     message.error(t('wallet.connectWallet'));
     return;
   }
-
+  
   creating.value = true;
-
+  
   try {
     const publicKey = walletState.value.publicKey!; // 非空断言，因为前面已经检查过
     const wallet = walletState.value.wallet;
@@ -134,8 +135,11 @@ const createToken = async () => {
         freezeAuthority: mintInfo.freezeAuthority?.toString() || null,
       };
     } catch (error) {
-      console.error('获取代币信息失败:', error);
+      // 获取代币信息失败，静默处理
     }
+
+    // 保存 Mint 地址到本地存储
+    addTokenMint(mintAddress, tokenName.value || undefined, tokenSymbol.value || undefined);
 
     message.success(t('createToken.createSuccess'));
 
@@ -143,7 +147,6 @@ const createToken = async () => {
     tokenName.value = '';
     tokenSymbol.value = '';
   } catch (error: any) {
-    console.error('创建代币失败:', error);
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
@@ -305,13 +308,13 @@ defineOptions({
                   <ToolOutlined />
                 </template>
                 {{ t('header.mintToken') }}
-              </a-button>
+        </a-button>
             </div>
           </div>
         </div>
       </div>
     </div>
-
+    
     <!-- 创建表单 -->
     <div v-else class="w-full py-3">
       <div
@@ -330,7 +333,7 @@ defineOptions({
               :class="{ '!border-solana-green': tokenName }" />
             <div class="mt-1.5 text-xs text-white/50">{{ t('createToken.name') }}</div>
           </div>
-
+      
           <!-- 代币符号 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
@@ -341,7 +344,7 @@ defineOptions({
               :class="{ '!border-solana-green': tokenSymbol }" :maxlength="10" />
             <div class="mt-1.5 text-xs text-white/50">{{ t('createToken.symbol') }}</div>
           </div>
-
+      
           <!-- 小数位数 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
@@ -397,7 +400,7 @@ defineOptions({
                 <PlusOutlined />
               </template>
               {{ creating ? t('createToken.creating') : t('createToken.create') }}
-            </a-button>
+        </a-button>
           </div>
         </div>
       </div>
@@ -476,4 +479,4 @@ defineOptions({
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: rgba(255, 255, 255, 0.4) !important;
 }
-</style>
+</style> 
