@@ -587,7 +587,7 @@ defineOptions({
     <a-modal
       v-model:open="detailModalVisible"
       title="交易详情"
-      width="90%"
+      width="58%"
       :footer="null"
       class="transaction-detail-modal"
     >
