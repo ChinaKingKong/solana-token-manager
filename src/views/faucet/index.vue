@@ -276,7 +276,7 @@ defineOptions({
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
         <h3 class="text-2xl font-bold text-white mb-2">{{ t('faucet.connectWalletFirst') }}</h3>
-        <p class="text-white/60">{{ t('faucet.title') }}</p>
+        <p class="text-white/60">{{ t('faucet.connectWalletDesc') }}</p>
       </div>
     </div>
 

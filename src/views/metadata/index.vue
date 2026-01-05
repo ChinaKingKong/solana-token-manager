@@ -501,7 +501,7 @@ defineOptions({
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
         <h3 class="text-2xl font-bold text-white mb-2">{{ t('setMetadata.connectWalletFirst') }}</h3>
-        <p class="text-white/60">{{ t('setMetadata.title') }}</p>
+        <p class="text-white/60">{{ t('setMetadata.connectWalletDesc') }}</p>
       </div>
     </div>
 

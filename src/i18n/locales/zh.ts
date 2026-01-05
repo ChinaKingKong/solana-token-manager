@@ -477,7 +477,7 @@ export default {
     convertToIpfsNotNeeded: '当前不是Pinata链接，无需转换',
     enterPinataApiKey: '请输入Pinata API密钥',
     connectWalletFirst: '请先连接钱包',
-    connectWalletDesc: '连接钱包以设置代币元数据',
+    connectWalletDesc: '连接钱包后即可设置代币元数据',
   },
   // Transaction History
   transactionHistory: {
@@ -569,6 +569,7 @@ export default {
     title: 'SOL水龙头',
     description: '请求测试网SOL代币用于开发和测试',
     connectWalletFirst: '请先连接钱包',
+    connectWalletDesc: '连接钱包后即可请求测试网SOL代币',
     devnetOnly: '仅限测试网',
     switchToDevnet: '请切换到测试网以使用水龙头功能',
     walletAddress: '钱包地址',

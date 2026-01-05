@@ -567,6 +567,7 @@ export default {
     title: 'SOL Faucet',
     description: 'Request testnet SOL tokens for development and testing',
     connectWalletFirst: 'Please connect wallet first',
+    connectWalletDesc: 'Connect wallet to request testnet SOL tokens',
     devnetOnly: 'Devnet Only',
     switchToDevnet: 'Please switch to devnet to use the faucet feature',
     walletAddress: 'Wallet Address',

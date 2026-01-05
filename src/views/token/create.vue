@@ -225,7 +225,7 @@ defineOptions({
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
         <h3 class="text-2xl font-bold text-white mb-2">{{ t('createToken.connectWalletFirst') }}</h3>
-        <p class="text-white/60">{{ t('createToken.title') }}</p>
+        <p class="text-white/60">{{ t('createToken.connectWalletDesc') }}</p>
       </div>
     </div>
 
