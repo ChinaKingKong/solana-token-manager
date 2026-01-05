@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined, PlusOutlined, SendOutlined, GlobalOutlined } from '@ant-design/icons-vue';
 import { PublicKey } from '@solana/web3.js';
 import { useWallet } from '../../hooks/useWallet';
-import { fetchOnChainMetadata } from '../../utils/metadata';
+import { fetchOnChainMetadata, type TokenMetadata } from '../../utils/metadata';
 
 const { t } = useI18n();
 
@@ -282,11 +282,18 @@ const fetchTokenMetadata = async () => {
     return;
   }
 
-  // 并行获取所有代币的链上元数据
+  // 并行获取所有代币的链上元数据（添加超时和错误处理）
   const metadataPromises = tokens.value.map(async (token) => {
     try {
       const mintPubkey = new PublicKey(token.mint);
-      const onChainMetadata = await fetchOnChainMetadata(conn, mintPubkey);
+      
+      // 添加超时控制，避免长时间等待
+      const timeoutPromise = new Promise<TokenMetadata | null>((_, reject) => {
+        setTimeout(() => reject(new Error('Metadata fetch timeout')), 15000); // 15秒超时
+      });
+      
+      const metadataPromise = fetchOnChainMetadata(conn, mintPubkey);
+      const onChainMetadata = await Promise.race([metadataPromise, timeoutPromise]);
       
       if (onChainMetadata && (onChainMetadata.name || onChainMetadata.symbol)) {
         return {
@@ -308,16 +315,40 @@ const fetchTokenMetadata = async () => {
 
   // 对于没有链上元数据的代币，尝试从 token list 获取
   try {
-    const response = await fetch('https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
+    // 使用多个备用 URL，提高成功率
+    const tokenListUrls = [
+      'https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json',
+      'https://cdn.jsdelivr.net/gh/solana-labs/token-list@main/src/tokens/solana.tokenlist.json',
+    ];
+    
+    let tokenList: any = null;
+    
+    for (const url of tokenListUrls) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+          signal: controller.signal,
+        });
 
-    if (response.ok) {
-      const tokenList = await response.json();
+        clearTimeout(timeoutId);
 
+        if (response.ok) {
+          tokenList = await response.json();
+          break; // 成功获取，退出循环
+        }
+      } catch (error) {
+        // 继续尝试下一个 URL
+        continue;
+      }
+    }
+
+    if (tokenList && tokenList.tokens) {
       tokens.value = tokens.value.map(token => {
         // 如果已经有元数据，跳过
         if (token.name && token.symbol) {

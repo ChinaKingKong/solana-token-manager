@@ -8,6 +8,7 @@ import MintAddressInput from '../../components/MintAddressInput.vue';
 import { uploadJSONToIPFS, validatePinataCredentials } from '../../utils/ipfs';
 import { getMetadataPDA, createUpdateMetadataAccountV3Instruction, createCreateMetadataAccountV3Instruction, TOKEN_METADATA_PROGRAM_ID, getUpdateAuthorityFromMetadata, parseMetadataDataV2 } from '../../utils/metadata';
 import { getMint } from '@solana/spl-token';
+import { Buffer } from 'buffer';
 
 const { t } = useI18n();
 import {

@@ -5,11 +5,12 @@ import {
   SYSVAR_RENT_PUBKEY,
   Connection,
 } from '@solana/web3.js';
-import {
-  createCreateMetadataAccountV3Instruction as createCreateMetadataAccountV3InstructionSDK,
-  TOKEN_METADATA_PROGRAM_ID as SDK_TOKEN_METADATA_PROGRAM_ID,
-  DataV2,
-} from '@metaplex-foundation/mpl-token-metadata';
+import { Buffer } from 'buffer';
+
+// 确保 Buffer 在全局可用（双重保险）
+if (typeof window !== 'undefined' && !(window as any).Buffer) {
+  (window as any).Buffer = Buffer;
+}
 
 // Metaplex Token Metadata Program ID
 // 注意：这个版本的库没有导出 TOKEN_METADATA_PROGRAM_ID，所以直接定义
@@ -263,24 +264,74 @@ async function fetchMetadataFromURI(
       // 转换 IPFS URI 为可访问的 URL
       let metadataUrl = uri;
       if (uri.startsWith('ipfs://')) {
-        metadataUrl = `https://ipfs.io/ipfs/${uri.replace('ipfs://', '')}`;
+        const cid = uri.replace('ipfs://', '').split('/')[0];
+        // 尝试多个 IPFS 网关，提高成功率
+        const gateways = [
+          `https://ipfs.io/ipfs/${cid}`,
+          `https://gateway.pinata.cloud/ipfs/${cid}`,
+          `https://cloudflare-ipfs.com/ipfs/${cid}`,
+          `https://dweb.link/ipfs/${cid}`,
+        ];
+        
+        // 尝试第一个网关
+        for (const gateway of gateways) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+            
+            const response = await fetch(gateway, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+              },
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+              const metadataJson = await response.json();
+              logoURI = metadataJson.image || metadataJson.logoURI || metadataJson.logo;
+              break; // 成功获取，退出循环
+            }
+          } catch (error) {
+            // 继续尝试下一个网关
+            continue;
+          }
+        }
       } else if (uri.startsWith('https://ipfs.io/ipfs/')) {
         metadataUrl = uri;
-      } else if (uri.includes('mypinata.cloud')) {
+      } else if (uri.includes('mypinata.cloud') || uri.includes('pinata.cloud')) {
         // Pinata 链接，直接使用
+        metadataUrl = uri;
+      } else if (uri.startsWith('http://') || uri.startsWith('https://')) {
+        // 其他 HTTP/HTTPS 链接
         metadataUrl = uri;
       }
       
-      const response = await fetch(metadataUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
+      // 如果还没有获取到 logoURI，尝试从原始 URL 获取
+      if (!logoURI && metadataUrl && (metadataUrl.startsWith('http://') || metadataUrl.startsWith('https://'))) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+          
+          const response = await fetch(metadataUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            signal: controller.signal,
+          });
 
-      if (response.ok) {
-        const metadataJson = await response.json();
-        logoURI = metadataJson.image || metadataJson.logoURI || metadataJson.logo;
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const metadataJson = await response.json();
+            logoURI = metadataJson.image || metadataJson.logoURI || metadataJson.logo;
+          }
+        } catch (error) {
+          // 如果获取失败，忽略错误，继续使用链上的 name 和 symbol
+        }
       }
     } catch (error) {
       // 如果获取失败，忽略错误，继续使用链上的 name 和 symbol

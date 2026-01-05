@@ -1,3 +1,6 @@
+// 必须在最前面导入 Buffer polyfill
+import './polyfills/buffer'
+
 import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
