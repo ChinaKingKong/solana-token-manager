@@ -18,6 +18,7 @@ import {
   RightOutlined,
   GlobalOutlined,
   TranslationOutlined,
+  GiftOutlined,
 } from '@ant-design/icons-vue';
 
 // 定义菜单项配置
@@ -45,6 +46,7 @@ const pageConfigs: PageConfig[] = [
   { key: 'ipfs-upload', titleKey: 'header.ipfsUpload', icon: UploadOutlined },
   { key: 'set-metadata', titleKey: 'header.setMetadata', icon: FileTextOutlined },
   { key: 'transaction-history', titleKey: 'header.transactionHistory', icon: HistoryOutlined },
+  { key: 'faucet', titleKey: 'header.faucet', icon: GiftOutlined },
 ];
 
 // 当前页面配置

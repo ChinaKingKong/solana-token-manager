@@ -14,6 +14,7 @@ const TokenFreeze = defineAsyncComponent(() => import("./views/token/freeze.vue"
 const IPFSUploader = defineAsyncComponent(() => import("./views/ipfs/index.vue"));
 const SetMetadata = defineAsyncComponent(() => import("./views/metadata/index.vue"));
 const TransactionHistory = defineAsyncComponent(() => import("./views/history/index.vue"));
+const Faucet = defineAsyncComponent(() => import("./views/faucet/index.vue"));
 
 // 当前激活的菜单项
 const activeKey = ref("token-list");
@@ -82,6 +83,7 @@ onMounted(() => {
         <component :is="IPFSUploader" v-else-if="activeKey === 'ipfs-upload'" />
         <component :is="SetMetadata" v-else-if="activeKey === 'set-metadata'" />
         <component :is="TransactionHistory" v-else-if="activeKey === 'transaction-history'" />
+        <component :is="Faucet" v-else-if="activeKey === 'faucet'" />
       </div>
     </div>
     </div>

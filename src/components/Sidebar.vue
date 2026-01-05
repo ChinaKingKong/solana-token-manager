@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useWallet } from '../hooks/useWallet';
 import {
   HomeOutlined,
   PlusOutlined,
@@ -13,15 +14,18 @@ import {
   CloseOutlined,
   MenuOutlined,
   ToolOutlined,
+  GiftOutlined,
 } from '@ant-design/icons-vue';
 
 const { t } = useI18n();
+const { network } = useWallet();
 
 // 定义菜单项
 interface MenuItem {
   key: string;
   labelKey: string;
   icon: any;
+  showOnlyOnDevnet?: boolean;
 }
 
 const menuItemsConfig: MenuItem[] = [
@@ -70,14 +74,28 @@ const menuItemsConfig: MenuItem[] = [
     labelKey: 'header.transactionHistory',
     icon: HistoryOutlined,
   },
+  {
+    key: 'faucet',
+    labelKey: 'header.faucet',
+    icon: GiftOutlined,
+    showOnlyOnDevnet: true,
+  },
 ];
 
-// 计算菜单项（使用国际化）
+// 计算菜单项（使用国际化，并根据网络过滤）
 const menuItems = computed(() => {
-  return menuItemsConfig.map(item => ({
-    ...item,
-    label: t(item.labelKey),
-  }));
+  return menuItemsConfig
+    .filter(item => {
+      // 如果菜单项只在devnet显示，检查当前网络
+      if (item.showOnlyOnDevnet && network.value !== 'devnet') {
+        return false;
+      }
+      return true;
+    })
+    .map(item => ({
+      ...item,
+      label: t(item.labelKey),
+    }));
 });
 
 // 接收外部传入的 activeKey
@@ -124,9 +142,9 @@ const toggleCollapse = () => {
         class="flex items-center px-4 py-3 mb-1 rounded-lg cursor-pointer transition-all duration-200 ease-in-out text-white/70 gap-3 hover:bg-[rgba(20,241,149,0.1)] hover:text-solana-green"
         :class="{ 'bg-gradient-to-r from-[rgba(20,241,149,0.2)] to-[rgba(20,241,149,0.05)] text-solana-green shadow-[0_2px_8px_rgba(20,241,149,0.2)]': props.activeKey === item.key }"
         @click="handleMenuSelect(item.key)">
-        <component :is="item.icon" class="text-lg shrink-0" />
+        <component :is="item.icon" class="text-lg shrink-0 flex items-center" />
         <transition name="fade">
-          <span v-if="!props.collapsed" class="text-sm whitespace-nowrap">{{ item.label }}</span>
+          <span v-if="!props.collapsed" class="text-sm whitespace-nowrap flex items-center">{{ item.label }}</span>
         </transition>
       </div>
     </div>

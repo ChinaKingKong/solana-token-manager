@@ -24,7 +24,7 @@ export function getRpcEndpoint(network: NetworkType = DEFAULT_NETWORK): string {
     // 检查环境变量是否存在
     if (mainnetRpc && typeof mainnetRpc === 'string' && mainnetRpc.trim() !== '') {
       endpoint = mainnetRpc.trim();
-    } else {
+    } else { 
       endpoint = 'https://api.mainnet-beta.solana.com';
     }
   } else {

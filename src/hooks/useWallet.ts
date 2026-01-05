@@ -353,6 +353,8 @@ export function useWalletProvider() {
       balance.value = lamports / LAMPORTS_PER_SOL;
     } catch (error: any) {
       balance.value = 0;
+      // 如果是403错误，可能是RPC端点速率限制，静默处理
+      // 用户可以通过配置自己的RPC端点来解决
     }
   };
 

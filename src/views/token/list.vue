@@ -74,12 +74,6 @@ const walletBalance = computed(() => {
   return walletState.value?.balance ?? 0;
 });
 
-// 调试信息
-const debugInfo = ref({
-  lastFetchTime: null as Date | null,
-  errorCount: 0,
-  lastError: null as string | null,
-});
 
 // 刷新余额
 const refreshBalance = async () => {
@@ -266,10 +260,6 @@ const fetchTokenList = async () => {
   } catch (error: any) {
     message.error(`${t('tokenList.title')}: ${error.message || t('common.error')}`);
 
-    // 更新调试信息
-    debugInfo.value.errorCount++;
-    debugInfo.value.lastError = error.message || '未知错误';
-    debugInfo.value.lastFetchTime = new Date();
 
     // 检查是否是网络问题
     if (error.message?.includes('fetch') || error.message?.includes('network')) {
@@ -282,7 +272,6 @@ const fetchTokenList = async () => {
     }
   } finally {
     loading.value = false;
-    debugInfo.value.lastFetchTime = new Date();
   }
 };
 
@@ -608,42 +597,6 @@ defineOptions({
         </div>
       </div>
 
-      <!-- 调试信息面板 -->
-      <div v-if="debugInfo.lastError"
-        class="mb-6 p-4 bg-[rgba(255,193,7,0.1)] border border-[rgba(255,193,7,0.3)] rounded-lg">
-        <div class="flex justify-between items-center mb-3">
-          <span class="text-base font-semibold text-[#ffc107]">⚠️ {{ t('tokenList.debugInfo') }}</span>
-          <a-button size="small" @click="debugInfo.lastError = null">{{ t('common.close') }}</a-button>
-        </div>
-        <div class="space-y-2">
-          <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
-            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">{{ t('tokenList.errorInfo') }}:</span>
-            <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.lastError }}</span>
-          </div>
-          <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
-            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">{{ t('tokenList.errorCount') }}:</span>
-            <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.errorCount }}</span>
-          </div>
-          <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
-            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">{{ t('tokenList.lastAttempt') }}:</span>
-            <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.lastFetchTime?.toLocaleString()
-            }}</span>
-          </div>
-          <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
-            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">{{ t('tokenList.walletPublicKey') }}:</span>
-            <span class="text-[13px] text-white font-mono break-all">{{ walletState.publicKey?.toString() }}</span>
-          </div>
-          <div class="mt-2">
-            <p class="m-0 mb-2 text-sm text-[#ffc107]"><strong>{{ t('tokenList.possibleIssues') }}:</strong></p>
-            <ul class="m-0 pl-5">
-              <li class="text-[13px] text-white/80 mb-1">{{ t('tokenList.noSplTokens') }}</li>
-              <li class="text-[13px] text-white/80 mb-1">{{ t('tokenList.rpcConnectionIssue') }}</li>
-              <li class="text-[13px] text-white/80 mb-1">{{ t('tokenList.networkDelay') }}</li>
-              <li class="text-[13px] text-white/80 mb-1">{{ t('tokenList.tryCreateToken') }}</li>
-            </ul>
-          </div>
-        </div>
-      </div>
 
       <div class="flex-1 min-h-0 overflow-y-auto pr-2 px-2">
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
