@@ -370,25 +370,25 @@ defineOptions({
               </div>
               <div class="grid grid-cols-2 gap-4">
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('mintToken.decimals') }}</div>
                   <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">当前供应量</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('mintToken.currentSupply') }}</div>
                   <div class="text-sm font-semibold text-white truncate">
                     {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toLocaleString() }}
                   </div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">铸币权限</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('mintToken.mintAuthority') }}</div>
                   <div class="text-xs font-mono text-white/90 truncate">
-                    {{ tokenInfo.mintAuthority ? formatAddress(tokenInfo.mintAuthority) : '无' }}
+                    {{ tokenInfo.mintAuthority ? formatAddress(tokenInfo.mintAuthority) : t('mintToken.none') }}
                   </div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">冻结权限</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('mintToken.freezeAuthority') }}</div>
                   <div class="text-xs font-mono text-white/90 truncate">
-                    {{ tokenInfo.freezeAuthority ? formatAddress(tokenInfo.freezeAuthority) : '无' }}
+                    {{ tokenInfo.freezeAuthority ? formatAddress(tokenInfo.freezeAuthority) : t('mintToken.none') }}
                   </div>
                 </div>
               </div>
@@ -397,7 +397,7 @@ defineOptions({
             <!-- 当前余额 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium text-white/80">当前余额</span>
+                <span class="text-sm font-medium text-white/80">{{ t('mintToken.currentBalance') }}</span>
                 <a-button
                   @click="fetchCurrentBalance"
                   :loading="loadingBalance"
@@ -406,7 +406,7 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  刷新
+                  {{ t('mintToken.refresh') }}
                 </a-button>
               </div>
               <div class="text-2xl font-bold text-solana-green">
@@ -424,7 +424,7 @@ defineOptions({
               />
               <div class="flex-1">
                 <div class="text-sm font-medium text-white/90 mb-1">{{ t('mintToken.mintToCurrentWallet') }}</div>
-                <div class="text-xs text-white/50">{{ t('mintToken.mintToCurrentWallet') }}</div>
+                <div class="text-xs text-white/50">{{ t('mintToken.mintToCurrentWalletDesc') }}</div>
                 <div v-if="walletState?.publicKey" class="text-xs text-white/40 mt-1 font-mono">
                   {{ formatAddress(walletState.publicKey?.toString() || '') }}
                 </div>
@@ -443,7 +443,7 @@ defineOptions({
                 :class="{ '!border-solana-green': targetWalletAddress && isValidSolanaAddress(targetWalletAddress), '!border-red-500': targetWalletAddress && !isValidSolanaAddress(targetWalletAddress) }"
               />
               <div class="mt-1.5 text-xs text-white/50">
-                {{ t('mintToken.targetWalletAddress') }}
+                {{ t('mintToken.targetWalletAddressDesc') }}
               </div>
               <div v-if="targetWalletAddress && !isValidSolanaAddress(targetWalletAddress)" class="mt-1.5 text-xs text-red-400">
                 {{ t('mintToken.addressInvalid') }}
@@ -462,11 +462,11 @@ defineOptions({
               :precision="decimals"
               :step="Math.pow(10, -decimals)"
               size="large"
-              class="w-full bg-white/5 border-white/20 text-white rounded-xl"
+              class="w-full bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': mintAmount }"
-              placeholder="请输入要铸造的数量"
+              :placeholder="t('mintToken.amountPlaceholder')"
             />
-            <div class="mt-1.5 text-xs text-white/50">最多支持 {{ decimals }} 位小数</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('mintToken.maxDecimals', { decimals }) }}</div>
           </div>
 
           <!-- 提示信息 -->
@@ -474,13 +474,13 @@ defineOptions({
             class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
             <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
             <div class="flex-1">
-              <div class="text-sm font-medium text-solana-green mb-1">铸造提示</div>
+              <div class="text-sm font-medium text-solana-green mb-1">{{ t('mintToken.mintTip') }}</div>
               <div class="text-xs text-white/70">
                 <ul class="m-0 pl-4 space-y-1">
-                  <li>只有拥有铸币权限(Mint Authority)的地址才能铸造代币</li>
-                  <li>铸造的代币将发送到指定钱包的关联代币账户(ATA)</li>
-                  <li>如果目标账户不存在，系统会自动创建（需要支付账户创建费用）</li>
-                  <li>请确保您有足够的 SOL 支付交易手续费和账户创建费用</li>
+                  <li>{{ t('mintToken.mintTip1') }}</li>
+                  <li>{{ t('mintToken.mintTip2') }}</li>
+                  <li>{{ t('mintToken.mintTip3') }}</li>
+                  <li>{{ t('mintToken.mintTip4') }}</li>
                 </ul>
               </div>
             </div>
@@ -537,7 +537,8 @@ defineOptions({
   box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;
 }
 
-:deep(.ant-input::placeholder) {
+:deep(.ant-input::placeholder),
+:deep(.ant-input-number-input::placeholder) {
   color: rgba(255, 255, 255, 0.4) !important;
 }
 

@@ -548,7 +548,7 @@ defineOptions({
             <template #icon>
               <ReloadOutlined />
             </template>
-            {{ t('common.loading') }}
+            {{ t('tokenList.refresh') }}
           </a-button>
         </div>
       </div>
@@ -557,34 +557,34 @@ defineOptions({
       <div v-if="debugInfo.lastError"
         class="mb-6 p-4 bg-[rgba(255,193,7,0.1)] border border-[rgba(255,193,7,0.3)] rounded-lg">
         <div class="flex justify-between items-center mb-3">
-          <span class="text-base font-semibold text-[#ffc107]">⚠️ 调试信息</span>
-          <a-button size="small" @click="debugInfo.lastError = null">关闭</a-button>
+          <span class="text-base font-semibold text-[#ffc107]">⚠️ {{ t('tokenList.debugInfo') }}</span>
+          <a-button size="small" @click="debugInfo.lastError = null">{{ t('common.close') }}</a-button>
         </div>
         <div class="space-y-2">
           <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
-            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">错误信息:</span>
+            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">{{ t('tokenList.errorInfo') }}:</span>
             <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.lastError }}</span>
           </div>
           <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
-            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">错误次数:</span>
+            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">{{ t('tokenList.errorCount') }}:</span>
             <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.errorCount }}</span>
           </div>
           <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
-            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">最后尝试:</span>
+            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">{{ t('tokenList.lastAttempt') }}:</span>
             <span class="text-[13px] text-white font-mono break-all">{{ debugInfo.lastFetchTime?.toLocaleString()
             }}</span>
           </div>
           <div class="flex gap-3 p-2 bg-black/20 rounded-lg">
-            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">钱包公钥:</span>
+            <span class="text-[13px] text-white/60 font-medium min-w-[100px]">{{ t('tokenList.walletPublicKey') }}:</span>
             <span class="text-[13px] text-white font-mono break-all">{{ walletState.publicKey?.toString() }}</span>
           </div>
           <div class="mt-2">
-            <p class="m-0 mb-2 text-sm text-[#ffc107]"><strong>可能的问题:</strong></p>
+            <p class="m-0 mb-2 text-sm text-[#ffc107]"><strong>{{ t('tokenList.possibleIssues') }}:</strong></p>
             <ul class="m-0 pl-5">
-              <li class="text-[13px] text-white/80 mb-1">钱包中可能没有任何SPL Token</li>
-              <li class="text-[13px] text-white/80 mb-1">RPC节点连接问题（Devnet可能不稳定）</li>
-              <li class="text-[13px] text-white/80 mb-1">网络延迟或超时</li>
-              <li class="text-[13px] text-white/80 mb-1">尝试先创建一个代币，然后再查看列表</li>
+              <li class="text-[13px] text-white/80 mb-1">{{ t('tokenList.noSplTokens') }}</li>
+              <li class="text-[13px] text-white/80 mb-1">{{ t('tokenList.rpcConnectionIssue') }}</li>
+              <li class="text-[13px] text-white/80 mb-1">{{ t('tokenList.networkDelay') }}</li>
+              <li class="text-[13px] text-white/80 mb-1">{{ t('tokenList.tryCreateToken') }}</li>
             </ul>
           </div>
         </div>
@@ -615,7 +615,7 @@ defineOptions({
                 </div>
                 <div class="space-y-1.5">
                   <div class="flex items-center gap-2">
-                    <span class="text-[11px] text-white/60 font-medium min-w-[35px]">数量</span>
+                    <span class="text-[11px] text-white/60 font-medium min-w-[35px]">{{ t('tokenList.quantity') }}</span>
                     <div
                       class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0">
                       <div class="text-[11px] text-white/80 font-mono truncate flex-1">
@@ -627,7 +627,7 @@ defineOptions({
                     <span class="text-[11px] text-white/60 font-medium min-w-[35px]">Mint</span>
                     <div
                       class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0"
-                      @click="copyAddress(token.mint, 'Mint地址')">
+                      @click="copyAddress(token.mint, t('tokenList.mintAddress'))">
                       <code class="text-[11px] text-white/80 font-mono truncate flex-1">{{ formatAddress(token.mint)
                       }}</code>
                       <CopyOutlined class="text-[11px] shrink-0 text-white/60" />
@@ -637,7 +637,7 @@ defineOptions({
                     <span class="text-[11px] text-white/60 font-medium min-w-[35px]">ATA</span>
                     <div
                       class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0"
-                      @click="copyAddress(token.ata, 'ATA地址')">
+                      @click="copyAddress(token.ata, t('tokenList.ataAddress'))">
                       <code class="text-[11px] text-white/80 font-mono truncate flex-1">{{ formatAddress(token.ata)
                       }}</code>
                       <CopyOutlined class="text-[11px] shrink-0 text-white/60" />
@@ -655,7 +655,7 @@ defineOptions({
                   class="flex items-center justify-center flex-1 px-3 py-1.5 text-xs font-medium rounded-full bg-[rgba(20,241,149,0.1)] border border-[rgba(20,241,149,0.2)] text-solana-green transition-all duration-300 ease-in-out hover:bg-[rgba(20,241,149,0.15)] hover:border-[rgba(20,241,149,0.3)] cursor-pointer"
                 >
                   <span class="mr-1">📤</span>
-                  转账
+                  {{ t('tokenList.transfer') }}
                 </button>
                 <button
                   @click="viewOnSolscan(token.mint)"
@@ -674,7 +674,7 @@ defineOptions({
       <div v-if="tokens.length > pageSize" class="mt-4 flex justify-center">
         <a-pagination v-model:current="currentPage" :total="tokens.length" :page-size="pageSize"
           :show-size-changer="false" :show-quick-jumper="true"
-          :show-total="(total: number, range: [number, number]) => `共 ${total} 个代币，第 ${range[0]}-${range[1]} 个`"
+          :show-total="(total: number, range: [number, number]) => t('tokenList.paginationTotal', { total, start: range[0], end: range[1] })"
           @change="handlePageChange"
           class="[&_.ant-pagination-item]:bg-white/10 [&_.ant-pagination-item]:border-white/20 [&_.ant-pagination-item]:text-white [&_.ant-pagination-item:hover]:border-solana-green [&_.ant-pagination-item-active]:bg-solana-green [&_.ant-pagination-item-active]:border-solana-green [&_.ant-pagination-prev]:text-white [&_.ant-pagination-next]:text-white [&_.ant-pagination-jump-prev]:text-white [&_.ant-pagination-jump-next]:text-white" />
       </div>

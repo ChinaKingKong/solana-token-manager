@@ -151,7 +151,7 @@ const viewTransactionDetail = async (signature: string) => {
       parsed: tx
     };
   } catch (error) {
-    message.error('获取交易详情失败');
+    message.error(t('transactionHistory.fetchDetailFailed'));
     console.error('获取交易详情失败:', error);
     // 即使失败也显示基本信息
     selectedTransaction.value = {
@@ -193,26 +193,26 @@ const formatTime = (timestamp: number | null) => {
 // 获取交易状态
 const getStatus = (tx: any) => {
   if (tx.err) {
-    return { text: '失败', color: 'error', icon: CloseCircleOutlined };
+    return { text: t('transactionHistory.statusFailed'), color: 'error', icon: CloseCircleOutlined };
   }
   if (tx.confirmationStatus === 'finalized') {
-    return { text: '已确认', color: 'success', icon: CheckCircleOutlined };
+    return { text: t('transactionHistory.statusConfirmed'), color: 'success', icon: CheckCircleOutlined };
   }
   if (tx.confirmationStatus === 'confirmed') {
-    return { text: '已确认', color: 'processing', icon: CheckCircleOutlined };
+    return { text: t('transactionHistory.statusConfirmed'), color: 'processing', icon: CheckCircleOutlined };
   }
-  return { text: '处理中', color: 'default', icon: ClockCircleOutlined };
+  return { text: t('transactionHistory.statusProcessing'), color: 'default', icon: ClockCircleOutlined };
 };
 
 // 获取交易类型
 const getTransactionType = (tx: any) => {
   if (!tx.parsed || !tx.parsed.transaction || !tx.parsed.transaction.message) {
-    return '未知';
+    return t('transactionHistory.typeUnknown');
   }
 
   const instructions = tx.parsed.transaction.message.instructions;
   if (!instructions || instructions.length === 0) {
-    return 'SOL转账';
+    return t('transactionHistory.typeSolTransfer');
   }
 
   // 检查第一条指令的类型
@@ -227,27 +227,27 @@ const getTransactionType = (tx: any) => {
       if (firstInstruction.parsed && firstInstruction.parsed.type) {
         const type = firstInstruction.parsed.type;
         const typeMap: Record<string, string> = {
-          'transfer': '代币转账',
-          'transferChecked': '代币转账',
-          'mintTo': '铸造代币',
-          'mintToChecked': '铸造代币',
-          'burn': '销毁代币',
-          'burnChecked': '销毁代币',
-          'freezeAccount': '冻结账户',
-          'thawAccount': '解冻账户',
+          'transfer': t('transactionHistory.typeTokenTransfer'),
+          'transferChecked': t('transactionHistory.typeTokenTransfer'),
+          'mintTo': t('transactionHistory.typeMintToken'),
+          'mintToChecked': t('transactionHistory.typeMintToken'),
+          'burn': t('transactionHistory.typeBurnToken'),
+          'burnChecked': t('transactionHistory.typeBurnToken'),
+          'freezeAccount': t('transactionHistory.typeFreezeAccount'),
+          'thawAccount': t('transactionHistory.typeThawAccount'),
         };
-        return typeMap[type] || '代币操作';
+        return typeMap[type] || t('transactionHistory.typeTokenOperation');
       }
-      return '代币操作';
+      return t('transactionHistory.typeTokenOperation');
     }
 
     // System Program
     if (programId.includes('System')) {
-      return 'SOL转账';
+      return t('transactionHistory.typeSolTransfer');
     }
   }
 
-  return '其他';
+  return t('transactionHistory.typeOther');
 };
 
 // 格式化地址
@@ -262,7 +262,7 @@ const parseTokenTransfer = (instruction: any) => {
 
   const info = instruction.parsed.info;
   return {
-    type: '代币转账',
+    type: t('transactionHistory.typeTokenTransfer'),
     source: info.source || info.authority || 'N/A',
     destination: info.destination || 'N/A',
     amount: info.amount ? info.amount : (info.tokenAmount?.amount || '0'),
@@ -280,11 +280,11 @@ const parseSolTransfer = (instruction: any, accounts: string[]) => {
 
   const info = instruction.parsed.info;
   return {
-    type: 'SOL 转账',
+    type: t('transactionHistory.typeSolTransfer'),
     source: info.source ? formatAddress(info.source) : (accounts[0] ? formatAddress(accounts[0]) : 'N/A'),
     destination: info.destination ? formatAddress(info.destination) : (accounts[1] ? formatAddress(accounts[1]) : 'N/A'),
     lamports: info.lamports || '0',
-    solAmount: info.lamports ? `${(Number(info.lamports) / 1e9).toFixed(9)} SOL` : '0 SOL'
+    solAmount: info.lamports ? `${(Number(info.lamports) / 1e9).toFixed(9)} ${t('transactionHistory.solUnit')}` : `0 ${t('transactionHistory.solUnit')}`
   };
 };
 
@@ -294,7 +294,7 @@ const parseMintTo = (instruction: any) => {
 
   const info = instruction.parsed.info;
   return {
-    type: '铸造代币',
+    type: t('transactionHistory.typeMintToken'),
     mint: info.mint ? formatAddress(info.mint) : 'N/A',
     destination: info.destination ? formatAddress(info.destination) : 'N/A',
     authority: info.authority ? formatAddress(info.authority) : 'N/A',
@@ -312,7 +312,7 @@ const parseBurn = (instruction: any) => {
 
   const info = instruction.parsed.info;
   return {
-    type: '销毁代币',
+    type: t('transactionHistory.typeBurnToken'),
     account: info.account ? formatAddress(info.account) : 'N/A',
     authority: info.authority ? formatAddress(info.authority) : 'N/A',
     amount: info.tokenAmount?.amount || info.amount || '0',
@@ -342,7 +342,7 @@ const parseInstructionDetails = (instruction: any, index: number, allAccounts: s
     } else if (instruction.parsed?.type === 'burn' || instruction.parsed?.type === 'burnChecked') {
       details = { ...details, ...parseBurn(instruction) };
     } else {
-      details.type = instruction.parsed?.type || '代币操作';
+      details.type = instruction.parsed?.type || t('transactionHistory.typeTokenOperation');
       details.raw = instruction.parsed?.info || {};
     }
   }
@@ -351,13 +351,13 @@ const parseInstructionDetails = (instruction: any, index: number, allAccounts: s
     if (instruction.parsed?.type === 'transfer') {
       details = { ...details, ...parseSolTransfer(instruction, allAccounts) };
     } else {
-      details.type = instruction.parsed?.type || '系统操作';
+      details.type = instruction.parsed?.type || t('transactionHistory.typeSystemOperation');
       details.raw = instruction.parsed?.info || {};
     }
   }
   // 其他程序
   else {
-    details.type = instruction.parsed?.type || '其他操作';
+    details.type = instruction.parsed?.type || t('transactionHistory.typeOtherOperation');
     details.raw = instruction.parsed || instruction;
   }
 
@@ -441,8 +441,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">{{ t('wallet.connectWallet') }}</h3>
-        <p class="text-white/60">{{ t('transactionHistory.title') }}</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('transactionHistory.connectWalletFirst') }}</h3>
+        <p class="text-white/60">{{ t('transactionHistory.connectWalletDesc') }}</p>
       </div>
     </div>
 
@@ -578,7 +578,7 @@ defineOptions({
               :page-size="pageSize"
               :show-size-changer="false"
               :show-quick-jumper="true"
-              :show-total="(total: number, range: [number, number]) => `共 ${total} 条交易，第 ${range[0]}-${range[1]} 条`"
+              :show-total="(total: number, range: [number, number]) => t('transactionHistory.paginationTotal', { total, start: range[0], end: range[1] })"
               @change="handlePageChange"
               class="[&_.ant-pagination-item]:bg-white/10 [&_.ant-pagination-item]:border-white/20 [&_.ant-pagination-item]:text-white [&_.ant-pagination-item:hover]:border-solana-green [&_.ant-pagination-item-active]:bg-solana-green [&_.ant-pagination-item-active]:border-solana-green [&_.ant-pagination-prev]:text-white [&_.ant-pagination-next]:text-white [&_.ant-pagination-jump-prev]:text-white [&_.ant-pagination-jump-next]:text-white [&_.ant-pagination-total-text]:text-white [&_.ant-pagination-options]:text-white [&_.ant-pagination-options-quick-jumper]:text-white [&_.ant-pagination-options-quick-jumper_input]:text-white" />
           </div>
@@ -645,17 +645,17 @@ defineOptions({
                 <div class="text-sm text-white/90 font-semibold">{{ selectedTransaction.slot || 'N/A' }}</div>
               </div>
               <div>
-                <div class="text-xs font-medium text-white/60 mb-2">时间</div>
+                <div class="text-xs font-medium text-white/60 mb-2">{{ t('transactionHistory.blockTime') }}</div>
                 <div class="text-sm text-white/90 font-semibold">{{ formatTime(selectedTransaction.blockTime) }}</div>
               </div>
               <div>
-                <div class="text-xs font-medium text-white/60 mb-2">交易费用</div>
+                <div class="text-xs font-medium text-white/60 mb-2">{{ t('transactionHistory.transactionFee') }}</div>
                 <div class="text-sm text-white/90 font-semibold">
-                  {{ selectedTransaction.parsed?.meta?.fee ? `${(selectedTransaction.parsed.meta.fee / 1e9).toFixed(9)} SOL` : 'N/A' }}
+                  {{ selectedTransaction.parsed?.meta?.fee ? `${(selectedTransaction.parsed.meta.fee / 1e9).toFixed(9)} ${t('transactionHistory.solUnit')}` : 'N/A' }}
                 </div>
               </div>
               <div>
-                <div class="text-xs font-medium text-white/60 mb-2">交易类型</div>
+                <div class="text-xs font-medium text-white/60 mb-2">{{ t('transactionHistory.transactionType') }}</div>
                 <div class="text-sm text-white/90 font-semibold">{{ getTransactionType(selectedTransaction) }}</div>
               </div>
             </div>
@@ -668,7 +668,7 @@ defineOptions({
           <div class="relative z-[1]">
             <h3 class="m-0 text-xl font-semibold text-white mb-4 flex items-center">
               <HistoryOutlined class="mr-2 text-solana-green" />
-              交易指令 ({{ selectedTransaction.parsed.transaction.message.instructions.length }})
+              {{ t('transactionHistory.transactionInstructions') }} ({{ selectedTransaction.parsed.transaction.message.instructions.length }})
             </h3>
             <div class="space-y-3">
               <div
@@ -677,82 +677,82 @@ defineOptions({
                 class="bg-white/5 rounded-xl p-4 border border-white/10 hover:border-[rgba(20,241,149,0.3)] transition-all duration-300">
                 <div class="flex items-center gap-3 mb-3 pb-3 border-b border-white/10">
                   <span class="bg-gradient-solana text-dark-bg font-bold text-xs px-3 py-1 rounded-lg">#{{ index + 1 }}</span>
-                  <span class="text-sm font-semibold text-white/90">{{ parseInstructionDetails(instruction, index, []).type || '未知类型' }}</span>
+                  <span class="text-sm font-semibold text-white/90">{{ parseInstructionDetails(instruction, index, []).type || t('transactionHistory.typeUnknown') }}</span>
                   <span class="ml-auto text-xs text-solana-green bg-solana-green/10 px-3 py-1 rounded-lg border border-solana-green/20">{{ parseInstructionDetails(instruction, index, []).programName }}</span>
                 </div>
 
                 <!-- SOL 转账详情 -->
-                <div v-if="parseInstructionDetails(instruction, index, []).type === 'SOL 转账'" class="space-y-3">
+                <div v-if="parseInstructionDetails(instruction, index, []).type === t('transactionHistory.typeSolTransfer')" class="space-y-3">
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">发送方:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.sender') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).source }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">接收方:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.recipient') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).destination }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">金额:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.amountLabel') }}:</span>
                     <span class="text-sm font-bold text-solana-green bg-solana-green/10 px-4 py-1.5 rounded-lg border border-solana-green/20">{{ parseInstructionDetails(instruction, index, []).solAmount }}</span>
                   </div>
                 </div>
 
                 <!-- 代币转账详情 -->
-                <div v-else-if="parseInstructionDetails(instruction, index, []).type === '代币转账'" class="space-y-3">
+                <div v-else-if="parseInstructionDetails(instruction, index, []).type === t('transactionHistory.typeTokenTransfer')" class="space-y-3">
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">发送方:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.sender') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ formatAddress(parseInstructionDetails(instruction, index, []).source) }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">接收方:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.recipient') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ formatAddress(parseInstructionDetails(instruction, index, []).destination) }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">代币:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.token') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ formatAddress(parseInstructionDetails(instruction, index, []).mint) }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">金额:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.amountLabel') }}:</span>
                     <span class="text-sm font-bold text-solana-green bg-solana-green/10 px-4 py-1.5 rounded-lg border border-solana-green/20">{{ parseInstructionDetails(instruction, index, []).tokenAmount }}</span>
                   </div>
                 </div>
 
                 <!-- 铸造代币详情 -->
-                <div v-else-if="parseInstructionDetails(instruction, index, []).type === '铸造代币'" class="space-y-3">
+                <div v-else-if="parseInstructionDetails(instruction, index, []).type === t('transactionHistory.typeMintToken')" class="space-y-3">
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">代币地址:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.tokenAddress') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).mint }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">接收方:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.recipient') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).destination }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">授权方:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.authority') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).authority }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">铸造数量:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.mintAmount') }}:</span>
                     <span class="text-sm font-bold text-solana-green bg-solana-green/10 px-4 py-1.5 rounded-lg border border-solana-green/20">{{ parseInstructionDetails(instruction, index, []).tokenAmount }}</span>
                   </div>
                 </div>
 
                 <!-- 销毁代币详情 -->
-                <div v-else-if="parseInstructionDetails(instruction, index, []).type === '销毁代币'" class="space-y-3">
+                <div v-else-if="parseInstructionDetails(instruction, index, []).type === t('transactionHistory.typeBurnToken')" class="space-y-3">
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">代币地址:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.tokenAddress') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).mint }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">账户:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.account') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).account }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">授权方:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.authority') }}:</span>
                     <code class="text-xs text-solana-green font-mono bg-solana-green/10 px-3 py-1.5 rounded-lg border border-solana-green/20 flex-1 break-all">{{ parseInstructionDetails(instruction, index, []).authority }}</code>
                   </div>
                   <div class="flex items-center gap-3">
-                    <span class="text-xs font-medium text-white/60 min-w-[80px]">销毁数量:</span>
+                    <span class="text-xs font-medium text-white/60 min-w-[80px]">{{ t('transactionHistory.burnAmount') }}:</span>
                     <span class="text-sm font-bold text-solana-green bg-solana-green/10 px-4 py-1.5 rounded-lg border border-solana-green/20">{{ parseInstructionDetails(instruction, index, []).tokenAmount }}</span>
                   </div>
                 </div>
@@ -772,7 +772,7 @@ defineOptions({
           <div class="relative z-[1]">
             <h3 class="m-0 text-xl font-semibold text-white mb-4 flex items-center">
               <WalletOutlined class="mr-2 text-solana-green" />
-              账户余额变更
+              {{ t('transactionHistory.accountBalanceChanges') }}
             </h3>
             <div class="space-y-3">
               <div
@@ -782,13 +782,13 @@ defineOptions({
                 <div class="flex items-center justify-between mb-2">
                   <code class="text-xs text-white/90 font-mono bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">{{ formatAddress(change.address) }}</code>
                   <span :class="['text-sm font-bold px-4 py-1.5 rounded-lg', Number(change.change) > 0 ? 'text-solana-green bg-solana-green/10 border border-solana-green/20' : 'text-red-400 bg-red-400/10 border border-red-400/20']">
-                    {{ Number(change.change) > 0 ? '+' : '' }}{{ change.change }} SOL
+                    {{ Number(change.change) > 0 ? '+' : '' }}{{ change.change }} {{ t('transactionHistory.solUnit') }}
                   </span>
                 </div>
                 <div class="flex items-center gap-2 text-xs text-white/60">
-                  <span>前: {{ change.preBalance }} SOL</span>
+                  <span>{{ t('transactionHistory.beforeLabel') }}: {{ change.preBalance }} {{ t('transactionHistory.solUnit') }}</span>
                   <span>→</span>
-                  <span>后: {{ change.postBalance }} SOL</span>
+                  <span>{{ t('transactionHistory.afterLabel') }}: {{ change.postBalance }} {{ t('transactionHistory.solUnit') }}</span>
                 </div>
               </div>
             </div>
@@ -801,7 +801,7 @@ defineOptions({
           <div class="relative z-[1]">
             <h3 class="m-0 text-xl font-semibold text-white mb-4 flex items-center">
               <HistoryOutlined class="mr-2 text-solana-green" />
-              交易日志 ({{ getTransactionLogs(selectedTransaction).length }})
+              {{ t('transactionHistory.transactionLogs') }} ({{ getTransactionLogs(selectedTransaction).length }})
             </h3>
             <div class="space-y-2 max-h-96 overflow-y-auto">
               <div
@@ -820,7 +820,7 @@ defineOptions({
           <div class="relative z-[1]">
             <h3 class="m-0 text-xl font-semibold text-red-400 mb-4 flex items-center">
               <CloseCircleOutlined class="mr-2" />
-              交易错误
+              {{ t('transactionHistory.transactionError') }}
             </h3>
             <pre class="text-xs text-red-300 font-mono bg-red-500/10 rounded-lg p-4 border border-red-400/20 overflow-auto max-h-64">{{ JSON.stringify(selectedTransaction.err, null, 2) }}</pre>
           </div>
@@ -832,14 +832,14 @@ defineOptions({
           <div class="relative z-[1]">
             <h3 class="m-0 text-xl font-semibold text-white mb-4 flex items-center">
               <GlobalOutlined class="mr-2 text-solana-green" />
-              完整交易数据
+              {{ t('transactionHistory.fullTransactionData') }}
             </h3>
             <pre class="text-xs text-white/80 font-mono bg-white/5 rounded-lg p-4 border border-white/10 overflow-auto max-h-96">{{ JSON.stringify(selectedTransaction, null, 2) }}</pre>
           </div>
         </div>
       </div>
       <div v-else class="text-center py-12">
-        <div class="text-white/60">加载中...</div>
+        <div class="text-white/60">{{ t('transactionHistory.loading') }}</div>
       </div>
     </a-modal>
   </div>

@@ -354,7 +354,7 @@ const executeOperation = async () => {
     }, 'confirmed');
 
     if (confirmation.value.err) {
-      throw new Error(`交易确认失败: ${JSON.stringify(confirmation.value.err)}`);
+      throw new Error(`${t('freezeManage.transactionConfirmFailed')}: ${JSON.stringify(confirmation.value.err)}`);
     }
 
     operationTransactionSignature.value = signature;
@@ -374,13 +374,13 @@ const executeOperation = async () => {
       message.warning(t('freezeManage.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
       message.error(t('wallet.connectWallet'));
-    } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
+    } else if (error.message?.includes('insufficient funds') || error.message?.includes('Insufficient funds')) {
       message.error(t('freezeManage.insufficientFunds'));
     } else if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
       message.error(t('freezeManage.freezeFailed'));
-    } else if (error.message?.includes('已经被冻结') || error.message?.includes(t('freezeManage.alreadyFrozen'))) {
+    } else if (error.message?.includes('already frozen') || error.message?.includes('Already frozen') || error.message?.includes(t('freezeManage.alreadyFrozen'))) {
       message.warning(t('freezeManage.alreadyFrozen'));
-    } else if (error.message?.includes('未被冻结') || error.message?.includes('无需解冻') || error.message?.includes(t('freezeManage.notFrozen'))) {
+    } else if (error.message?.includes('not frozen') || error.message?.includes('Not frozen') || error.message?.includes('no need to thaw') || error.message?.includes(t('freezeManage.notFrozen'))) {
       message.warning(t('freezeManage.notFrozen'));
     } else if (error.name === 'WalletSendTransactionError' || error.message?.includes('Unexpected error')) {
       message.error(t('freezeManage.freezeFailed'));
@@ -473,8 +473,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
-        <p class="text-white/60">连接钱包后即可管理代币账户冻结状态</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('freezeManage.connectWalletFirst') }}</h3>
+        <p class="text-white/60">{{ t('freezeManage.connectWalletDesc') }}</p>
       </div>
     </div>
 
@@ -489,8 +489,8 @@ defineOptions({
           <div class="flex items-center gap-3 mb-6">
             <CheckCircleOutlined class="text-3xl text-[#52c41a]" />
             <div>
-              <h3 class="m-0 text-xl font-semibold text-white">操作成功！</h3>
-              <p class="m-0 text-sm text-white/60 mt-1">账户已成功{{ lastOperationType === 'freeze' ? '冻结' : '解冻' }}，请查看交易详情</p>
+              <h3 class="m-0 text-xl font-semibold text-white">{{ t('freezeManage.freezeSuccess') }}</h3>
+              <p class="m-0 text-sm text-white/60 mt-1">{{ t('freezeManage.successMessage', { operation: lastOperationType === 'freeze' ? t('freezeManage.freeze') : t('freezeManage.thaw') }) }}</p>
             </div>
           </div>
 
@@ -498,7 +498,7 @@ defineOptions({
             <!-- 交易签名 -->
             <div v-if="operationTransactionSignature" class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center gap-2 mb-2">
-                <span class="text-sm font-medium text-white/80">交易签名</span>
+                <span class="text-sm font-medium text-white/80">{{ t('transactionHistory.detailSignature') }}</span>
               </div>
               <div class="flex items-center gap-2">
                 <div
@@ -510,7 +510,7 @@ defineOptions({
                   <template #icon>
                     <CopyOutlined />
                   </template>
-                  复制
+                  {{ t('common.copy') }}
                 </a-button>
                 <a-button @click="viewTransaction(operationTransactionSignature)"
                   class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
@@ -525,13 +525,13 @@ defineOptions({
             <!-- 账户状态 -->
             <div v-if="accountInfo" class="grid grid-cols-2 gap-4">
               <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-                <div class="text-xs font-medium text-white/60 mb-1">账户状态</div>
+                <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.accountStatus') }}</div>
                 <div class="text-base font-semibold" :class="isFrozen ? 'text-red-400' : 'text-green-400'">
-                  {{ isFrozen ? '已冻结' : '正常' }}
+                  {{ isFrozen ? t('freezeManage.frozen') : t('freezeManage.normal') }}
                 </div>
               </div>
               <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-                <div class="text-xs font-medium text-white/60 mb-1">账户余额</div>
+                <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.accountBalance') }}</div>
                 <div class="text-base font-semibold text-white">
                   {{ (Number(accountInfo.amount) / Math.pow(10, tokenInfo?.decimals || 9)).toLocaleString(undefined, { maximumFractionDigits: tokenInfo?.decimals || 9 }) }}
                 </div>
@@ -545,7 +545,7 @@ defineOptions({
                 <template #icon>
                   <LockOutlined />
                 </template>
-                继续管理
+                {{ t('freezeManage.continueManage') }}
               </a-button>
             </div>
           </div>
@@ -564,23 +564,23 @@ defineOptions({
           <!-- Mint 地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              Mint 地址 <span class="text-red-400">*</span>
+              {{ t('freezeManage.mintAddress') }} <span class="text-red-400">*</span>
             </label>
             <a-input
               v-model:value="tokenMintAddress"
-              placeholder="请输入代币的Mint地址"
+              :placeholder="t('freezeManage.mintAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': tokenMintAddress }"
             />
-            <div class="mt-1.5 text-xs text-white/50">输入要管理的代币的Mint地址</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('freezeManage.mintAddressDesc') }}</div>
           </div>
 
           <!-- 代币信息显示 -->
           <div v-if="tokenInfo" class="space-y-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="m-0 text-base font-semibold text-white">代币信息</h3>
+                <h3 class="m-0 text-base font-semibold text-white">{{ t('freezeManage.tokenInfo') }}</h3>
                 <div class="flex items-center gap-2">
                   <a-button
                     @click="viewOnSolscan(tokenMintAddress)"
@@ -599,31 +599,31 @@ defineOptions({
                     <template #icon>
                       <ReloadOutlined />
                     </template>
-                    刷新
+                    {{ t('freezeManage.refresh') }}
                   </a-button>
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-4">
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.decimals') }}</div>
                   <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">当前供应量</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.currentSupply') }}</div>
                   <div class="text-sm font-semibold text-white truncate">
                     {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toLocaleString() }}
                   </div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">冻结权限</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.freezeAuthority') }}</div>
                   <div class="text-xs font-mono text-white/90 truncate">
-                    {{ tokenInfo.freezeAuthority ? formatAddress(tokenInfo.freezeAuthority) : '无' }}
+                    {{ tokenInfo.freezeAuthority ? formatAddress(tokenInfo.freezeAuthority) : t('mintToken.none') }}
                   </div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">权限状态</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.permissionStatus') }}</div>
                   <div class="text-sm font-semibold" :class="hasFreezeAuthority ? 'text-green-400' : 'text-red-400'">
-                    {{ hasFreezeAuthority ? '有权限' : '无权限' }}
+                    {{ hasFreezeAuthority ? t('freezeManage.hasPermission') : t('freezeManage.noPermission') }}
                   </div>
                 </div>
               </div>
@@ -633,9 +633,9 @@ defineOptions({
             <div v-if="!hasFreezeAuthority" class="flex items-start gap-3 p-4 bg-[rgba(255,77,79,0.1)] rounded-xl border border-[rgba(255,77,79,0.2)]">
               <ExclamationCircleOutlined class="text-red-400 text-lg shrink-0 mt-0.5" />
               <div class="flex-1">
-                <div class="text-sm font-medium text-red-400 mb-1">无冻结权限</div>
+                <div class="text-sm font-medium text-red-400 mb-1">{{ t('freezeManage.noFreezePermission') }}</div>
                 <div class="text-xs text-white/70">
-                  您不是该代币的冻结权限持有者，无法执行冻结/解冻操作。请使用具有冻结权限的钱包地址。
+                  {{ t('freezeManage.noFreezePermissionDesc') }}
                 </div>
               </div>
             </div>
@@ -644,11 +644,11 @@ defineOptions({
           <!-- 目标账户地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              目标账户地址 (ATA) <span class="text-red-400">*</span>
+              {{ t('freezeManage.targetAccountAddress') }} <span class="text-red-400">*</span>
             </label>
             <a-input
               v-model:value="targetAccountAddress"
-              placeholder="请输入要冻结/解冻的代币账户地址"
+              :placeholder="t('freezeManage.targetAccountAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{
@@ -656,9 +656,9 @@ defineOptions({
                 '!border-red-500': targetAccountAddress && !isValidSolanaAddress(targetAccountAddress)
               }"
             />
-            <div class="mt-1.5 text-xs text-white/50">输入要管理的关联代币账户地址</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('freezeManage.targetAccountAddressDesc') }}</div>
             <div v-if="targetAccountAddress && !isValidSolanaAddress(targetAccountAddress)" class="mt-1.5 text-xs text-red-400">
-              地址格式不正确
+              {{ t('freezeManage.addressInvalid') }}
             </div>
           </div>
 
@@ -666,7 +666,7 @@ defineOptions({
           <div v-if="accountInfo" class="space-y-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="m-0 text-base font-semibold text-white">账户信息</h3>
+                <h3 class="m-0 text-base font-semibold text-white">{{ t('freezeManage.accountInfo') }}</h3>
                 <a-button
                   @click="fetchAccountInfo"
                   :loading="loadingInfo"
@@ -675,12 +675,12 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  刷新
+                  {{ t('freezeManage.refresh') }}
                 </a-button>
               </div>
               <div class="grid grid-cols-2 gap-4">
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">账户地址</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.accountAddress') }}</div>
                   <div class="flex items-center gap-2">
                     <code class="text-xs text-white/70 font-mono flex-1 truncate">{{ formatAddress(accountInfo.address) }}</code>
                     <a-button
@@ -695,19 +695,19 @@ defineOptions({
                   </div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">账户状态</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.accountStatus') }}</div>
                   <div class="text-sm font-semibold" :class="isFrozen ? 'text-red-400' : 'text-green-400'">
-                    {{ isFrozen ? '已冻结' : '正常' }}
+                    {{ isFrozen ? t('freezeManage.frozen') : t('freezeManage.normal') }}
                   </div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">账户余额</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.accountBalance') }}</div>
                   <div class="text-sm font-semibold text-white">
                     {{ (Number(accountInfo.amount) / Math.pow(10, tokenInfo?.decimals || 9)).toLocaleString(undefined, { maximumFractionDigits: tokenInfo?.decimals || 9 }) }}
                   </div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">账户所有者</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('freezeManage.accountOwner') }}</div>
                   <div class="text-xs font-mono text-white/70 truncate">{{ formatAddress(accountInfo.owner) }}</div>
                 </div>
               </div>
@@ -715,19 +715,19 @@ defineOptions({
 
             <!-- 操作类型选择 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-              <h3 class="m-0 text-base font-semibold text-white mb-4">选择操作</h3>
+              <h3 class="m-0 text-base font-semibold text-white mb-4">{{ t('freezeManage.selectOperation') }}</h3>
               <a-radio-group v-model:value="operationType" button-style="solid" class="w-full">
                 <a-radio-button value="freeze" :disabled="isFrozen" class="flex-1">
                   <template #icon>
                     <LockOutlined />
                   </template>
-                  冻结账户
+                  {{ t('freezeManage.freeze') }}
                 </a-radio-button>
                 <a-radio-button value="thaw" :disabled="!isFrozen" class="flex-1">
                   <template #icon>
                     <UnlockOutlined />
                   </template>
-                  解冻账户
+                  {{ t('freezeManage.thaw') }}
                 </a-radio-button>
               </a-radio-group>
 
@@ -735,15 +735,15 @@ defineOptions({
                 <div v-if="operationType === 'freeze'" class="flex items-start gap-2">
                   <WarningOutlined class="text-[#faad14] text-base shrink-0 mt-0.5" />
                   <div class="flex-1">
-                    <div class="text-sm font-medium text-[#faad14] mb-1">冻结操作</div>
-                    <div class="text-xs text-white/70">冻结后，该账户的代币将无法转账或交易。</div>
+                    <div class="text-sm font-medium text-[#faad14] mb-1">{{ t('freezeManage.freezeOperation') }}</div>
+                    <div class="text-xs text-white/70">{{ t('freezeManage.freezeOperationDesc') }}</div>
                   </div>
                 </div>
                 <div v-else class="flex items-start gap-2">
                   <CheckCircleOutlined class="text-[#52c41a] text-base shrink-0 mt-0.5" />
                   <div class="flex-1">
-                    <div class="text-sm font-medium text-[#52c41a] mb-1">解冻操作</div>
-                    <div class="text-xs text-white/70">解冻后，该账户将恢复正常交易功能。</div>
+                    <div class="text-sm font-medium text-[#52c41a] mb-1">{{ t('freezeManage.thawOperation') }}</div>
+                    <div class="text-xs text-white/70">{{ t('freezeManage.thawOperationDesc') }}</div>
                   </div>
                 </div>
               </div>
@@ -755,13 +755,13 @@ defineOptions({
             class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
             <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
             <div class="flex-1">
-              <div class="text-sm font-medium text-solana-green mb-1">操作提示</div>
+              <div class="text-sm font-medium text-solana-green mb-1">{{ t('freezeManage.operationTip') }}</div>
               <div class="text-xs text-white/70">
                 <ul class="m-0 pl-4 space-y-1">
-                  <li>只有代币的冻结权限持有者才能执行冻结/解冻操作</li>
-                  <li>冻结账户会阻止该账户的代币被转账或交易</li>
-                  <li>解冻账户会恢复正常的交易功能</li>
-                  <li>请确保您有权操作目标账户，否则操作将失败</li>
+                  <li>{{ t('freezeManage.operationTip1') }}</li>
+                  <li>{{ t('freezeManage.operationTip2') }}</li>
+                  <li>{{ t('freezeManage.operationTip3') }}</li>
+                  <li>{{ t('freezeManage.operationTip4') }}</li>
                 </ul>
               </div>
             </div>
@@ -784,7 +784,7 @@ defineOptions({
                 <LockOutlined v-if="operationType === 'freeze'" />
                 <UnlockOutlined v-else />
               </template>
-              {{ processing ? (operationType === 'freeze' ? '冻结中...' : '解冻中...') : (operationType === 'freeze' ? '冻结账户' : '解冻账户') }}
+              {{ processing ? (operationType === 'freeze' ? t('freezeManage.freezing') : t('freezeManage.thawing')) : (operationType === 'freeze' ? t('freezeManage.freeze') : t('freezeManage.thaw')) }}
             </a-button>
           </div>
         </div>

@@ -100,7 +100,7 @@ const fetchTokenInfo = async () => {
     decimals.value = mintInfo.decimals;
     await fetchSenderBalance();
   } catch (error: any) {
-    message.error(`获取代币信息失败: ${error.message || '请检查Mint地址'}`);
+    message.error(`${t('transferToken.fetchTokenInfoFailed')}: ${error.message || t('transferToken.checkMintAddress')}`);
     tokenInfo.value = null;
   } finally {
     loadingInfo.value = false;
@@ -136,7 +136,7 @@ const fetchSenderBalance = async () => {
       senderATA.value = '';
     }
   } catch (error: any) {
-    message.error(`获取余额失败: ${error.message || '未知错误'}`);
+    message.error(`${t('transferToken.fetchBalanceFailed')}: ${error.message || t('transferToken.unknownError')}`);
     senderBalance.value = 0;
   } finally {
     loadingBalance.value = false;
@@ -281,7 +281,7 @@ const handleTransfer = async () => {
       message.warning(t('transferToken.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
       message.error(t('wallet.connectWallet'));
-    } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
+    } else if (error.message?.includes('insufficient funds') || error.message?.includes('Insufficient funds')) {
       message.error(t('transferToken.insufficientBalance'));
     } else {
       message.error(`${t('transferToken.transferFailed')}: ${error.message || t('common.error')}`);
@@ -302,10 +302,10 @@ const setMaxAmount = () => {
 const copyAddress = (address: string) => {
   navigator.clipboard.writeText(address)
     .then(() => {
-      message.success('地址已复制到剪贴板');
+      message.success(t('wallet.addressCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('transferToken.copyFailed'));
     });
 };
 
@@ -350,8 +350,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
-        <p class="text-white/60">连接钱包后即可转账代币</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('transferToken.connectWalletFirst') }}</h3>
+        <p class="text-white/60">{{ t('transferToken.connectWalletDesc') }}</p>
       </div>
     </div>
 
@@ -366,23 +366,23 @@ defineOptions({
           <!-- Mint 地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              Mint 地址 <span class="text-red-400">*</span>
+              {{ t('transferToken.mintAddress') }} <span class="text-red-400">*</span>
             </label>
             <a-input
               v-model:value="tokenMintAddress"
-              placeholder="请输入代币的Mint地址"
+              :placeholder="t('transferToken.mintAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': tokenMintAddress }"
             />
-            <div class="mt-1.5 text-xs text-white/50">输入要转账的代币的Mint地址</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('transferToken.mintAddressDesc') }}</div>
           </div>
 
           <!-- 代币信息显示 -->
           <div v-if="tokenInfo" class="space-y-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="m-0 text-base font-semibold text-white">代币信息</h3>
+                <h3 class="m-0 text-base font-semibold text-white">{{ t('transferToken.tokenInfo') }}</h3>
                 <div class="flex items-center gap-2">
                   <a-button
                     @click="viewOnSolscan(tokenMintAddress)"
@@ -401,17 +401,17 @@ defineOptions({
                     <template #icon>
                       <ReloadOutlined />
                     </template>
-                    刷新
+                    {{ t('transferToken.refresh') }}
                   </a-button>
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-4">
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('transferToken.decimals') }}</div>
                   <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">当前供应量</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('transferToken.currentSupply') }}</div>
                   <div class="text-sm font-semibold text-white truncate">
                     {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toLocaleString() }}
                   </div>
@@ -422,7 +422,7 @@ defineOptions({
             <!-- 发送者余额 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium text-white/80">您的余额</span>
+                <span class="text-sm font-medium text-white/80">{{ t('transferToken.yourBalance') }}</span>
                 <a-button
                   @click="fetchSenderBalance"
                   :loading="loadingBalance"
@@ -431,7 +431,7 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  刷新
+                  {{ t('transferToken.refresh') }}
                 </a-button>
               </div>
               <div class="text-2xl font-bold text-solana-green mb-2">
@@ -456,11 +456,11 @@ defineOptions({
           <!-- 接收地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              接收地址 <span class="text-red-400">*</span>
+              {{ t('transferToken.recipientAddress') }} <span class="text-red-400">*</span>
             </label>
             <a-input
               v-model:value="recipientAddress"
-              placeholder="请输入接收者的钱包地址"
+              :placeholder="t('transferToken.recipientAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{
@@ -468,16 +468,16 @@ defineOptions({
                 '!border-red-500': recipientAddress && !isValidSolanaAddress(recipientAddress)
               }"
             />
-            <div class="mt-1.5 text-xs text-white/50">接收代币的钱包地址(Solana地址)</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('transferToken.recipientAddressDesc') }}</div>
             <div v-if="recipientAddress && !isValidSolanaAddress(recipientAddress)" class="mt-1.5 text-xs text-red-400">
-              地址格式不正确
+              {{ t('transferToken.addressInvalid') }}
             </div>
           </div>
 
           <!-- 转账数量 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              转账数量 <span class="text-red-400">*</span>
+              {{ t('transferToken.amount') }} <span class="text-red-400">*</span>
             </label>
             <div class="flex items-center gap-2">
               <a-input-number
@@ -487,9 +487,9 @@ defineOptions({
                 :precision="decimals"
                 :step="Math.pow(10, -decimals)"
                 size="large"
-                class="flex-1 bg-white/5 border-white/20 text-white rounded-xl"
+                class="flex-1 bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
                 :class="{ '!border-solana-green': transferAmount }"
-                placeholder="请输入转账数量"
+                :placeholder="t('transferToken.amountPlaceholder')"
               />
               <a-button
                 @click="setMaxAmount"
@@ -499,10 +499,10 @@ defineOptions({
               </a-button>
             </div>
             <div class="mt-1.5 text-xs text-white/50">
-              最多支持 {{ decimals }} 位小数，当前余额: {{ senderBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
+              {{ t('transferToken.maxDecimals', { decimals, balance: senderBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }) }}
             </div>
             <div v-if="transferAmount && parseFloat(transferAmount) > senderBalance" class="mt-1.5 text-xs text-red-400">
-              转账金额不能超过当前余额
+              {{ t('transferToken.amountExceedsBalance') }}
             </div>
           </div>
 
@@ -511,13 +511,13 @@ defineOptions({
             class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
             <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
             <div class="flex-1">
-              <div class="text-sm font-medium text-solana-green mb-1">转账提示</div>
+              <div class="text-sm font-medium text-solana-green mb-1">{{ t('transferToken.transferTip') }}</div>
               <div class="text-xs text-white/70">
                 <ul class="m-0 pl-4 space-y-1">
-                  <li>转账前请确保接收地址正确，转账到错误地址可能导致资金无法找回</li>
-                  <li>如果接收者账户不存在，系统会自动创建（需要支付账户创建费用）</li>
-                  <li>请确保您有足够的 SOL 支付交易手续费和账户创建费用</li>
-                  <li>建议先转账小额测试</li>
+                  <li>{{ t('transferToken.transferTip1') }}</li>
+                  <li>{{ t('transferToken.transferTip2') }}</li>
+                  <li>{{ t('transferToken.transferTip3') }}</li>
+                  <li>{{ t('transferToken.transferTip4') }}</li>
                 </ul>
               </div>
             </div>
@@ -536,7 +536,7 @@ defineOptions({
               <template #icon>
                 <SendOutlined />
               </template>
-              {{ transferring ? '转账中...' : '转账代币' }}
+              {{ transferring ? t('transferToken.transferring') : t('transferToken.transfer') }}
             </a-button>
           </div>
         </div>
@@ -574,7 +574,8 @@ defineOptions({
   box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;
 }
 
-:deep(.ant-input::placeholder) {
+:deep(.ant-input::placeholder),
+:deep(.ant-input-number-input::placeholder) {
   color: rgba(255, 255, 255, 0.4) !important;
 }
 

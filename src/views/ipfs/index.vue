@@ -325,13 +325,13 @@ const convertToIpfsIo = () => {
       const cid = parts[1].trim();
       if (cid) {
         uploadedUrl.value = `https://ipfs.io/ipfs/${cid}`;
-        message.success('已转换为IPFS.io链接');
+        message.success(t('ipfsUpload.convertToIpfsSuccess'));
         return;
       }
     }
-    message.error('无法转换链接，CID格式不正确');
+    message.error(t('ipfsUpload.convertToIpfsFailed'));
   } else {
-    message.info('当前不是Pinata链接，无需转换');
+    message.info(t('ipfsUpload.convertToIpfsNotNeeded'));
   }
 };
 
@@ -345,7 +345,7 @@ const useNewLink = () => {
   uploadedUrl.value = actualNewUrl.value;
   actualNewUrl.value = '';
   localStorage.removeItem('lastActualNewUrl');
-  message.success('已切换到新链接');
+  message.success(t('ipfsUpload.switchToNewUrl'));
 };
 
 // 组件挂载时的初始化
@@ -383,12 +383,12 @@ defineOptions({
             <div class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
               <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
               <div class="flex-1">
-                <div class="text-sm font-medium text-solana-green mb-1">上传说明</div>
+                <div class="text-sm font-medium text-solana-green mb-1">{{ t('ipfsUpload.uploadDescription') }}</div>
                 <div class="text-xs text-white/70">
                   <ul class="m-0 pl-4 space-y-1">
-                    <li>您可以选择文件上传或JSON编辑模式上传内容到IPFS</li>
-                    <li>上传成功后，您将获得一个IPFS链接，可用于代币的Metadata设置</li>
-                    <li>支持图片、JSON等文件类型，文件大小不超过10MB</li>
+                    <li>{{ t('ipfsUpload.uploadDescription1') }}</li>
+                    <li>{{ t('ipfsUpload.uploadDescription2') }}</li>
+                    <li>{{ t('ipfsUpload.uploadDescription3') }}</li>
                   </ul>
                 </div>
               </div>
@@ -441,7 +441,7 @@ defineOptions({
                   />
                 </div>
                 <div class="mt-2 text-xs text-white/60">
-                  在 <a href="https://app.pinata.cloud/" target="_blank" class="text-solana-green hover:underline">Pinata App</a> 的 "API Keys" 页面创建新密钥，获取 API Key 和 Secret Key
+                  <span v-html="t('ipfsUpload.apiKeySecretDesc', { link: '<a href=\'https://app.pinata.cloud/\' target=\'_blank\' class=\'text-solana-green hover:underline\'>' + t('ipfsUpload.pinataAppLink') + '</a>' })"></span>
                 </div>
               </template>
               
@@ -459,7 +459,7 @@ defineOptions({
                   :class="{ '!border-solana-green': pinataJwt }"
                 />
                 <div class="mt-2 text-xs text-white/60">
-                  在 <a href="https://app.pinata.cloud/" target="_blank" class="text-solana-green hover:underline">Pinata App</a> 的 "API Keys" 页面创建新密钥，复制 JWT 令牌
+                  <span v-html="t('ipfsUpload.jwtDesc', { link: '<a href=\'https://app.pinata.cloud/\' target=\'_blank\' class=\'text-solana-green hover:underline\'>' + t('ipfsUpload.pinataAppLink') + '</a>' })"></span>
                 </div>
               </div>
               
@@ -481,7 +481,7 @@ defineOptions({
               </div>
               
               <div class="text-xs text-white/50">
-                注意: 直接在浏览器中调用Pinata API，凭证将暴露在前端代码中。生产环境中应使用后端服务处理上传。
+                {{ t('ipfsUpload.securityNote') }}
               </div>
             </div>
           </div>
@@ -508,7 +508,7 @@ defineOptions({
           <!-- 文件上传模式 -->
           <div v-if="uploadMode === 'file'">
             <label class="block text-sm font-medium text-white/90 mb-2">
-              选择文件 <span class="text-red-400">*</span>
+              {{ t('ipfsUpload.selectFile') }} <span class="text-red-400">*</span>
             </label>
             <a-upload-dragger
               v-model:fileList="fileList"
@@ -621,7 +621,7 @@ defineOptions({
                   <template #icon>
                     <GlobalOutlined />
                   </template>
-                  转换
+                  {{ t('ipfsUpload.convert') }}
                 </a-button>
               </div>
             </div>
@@ -629,7 +629,7 @@ defineOptions({
             <!-- 实际新URL（如果有） -->
             <div v-if="actualNewUrl" class="bg-[rgba(250,173,20,0.1)] rounded-xl p-4 border border-[rgba(250,173,20,0.2)]">
               <div class="flex items-center gap-2 mb-2">
-                <span class="text-sm font-medium text-[#faad14]">实际新URL (内容已更新)</span>
+                <span class="text-sm font-medium text-[#faad14]">{{ t('ipfsUpload.actualNewUrl') }}</span>
               </div>
               <div class="flex items-center gap-2 mb-2">
                 <div
@@ -643,22 +643,22 @@ defineOptions({
                   <template #icon>
                     <CopyOutlined />
                   </template>
-                  复制
+                  {{ t('common.copy') }}
                 </a-button>
                 <a-button @click="useNewLink"
                   class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
-                  使用
+                  {{ t('ipfsUpload.use') }}
                 </a-button>
               </div>
               <div class="text-xs text-white/70">
-                这是内容更新后的实际新URL。如果您需要立即访问更新后的内容，请使用此链接。
+                {{ t('ipfsUpload.actualNewUrlDesc') }}
               </div>
             </div>
             
             <!-- 已上传的JSON内容 -->
             <div v-if="uploadedJsonContent !== null" class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="m-0 text-base font-semibold text-white">已上传的JSON内容</h3>
+                <h3 class="m-0 text-base font-semibold text-white">{{ t('ipfsUpload.uploadedJsonContent') }}</h3>
                 <a-button
                   type="text"
                   @click="editUploadedJson"

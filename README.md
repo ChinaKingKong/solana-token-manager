@@ -4,8 +4,9 @@
 
 A comprehensive Solana SPL token management system built with Vue 3, TypeScript, and Solana blockchain.
 
-![Token List Demo](/src/assets/Demo1.jpg) 
-![Transaction History Demo](/src/assets/Demo6.jpg)
+![Token List Demo](/src/assets/Demo1_en.jpg) 
+![Transaction History Demo](/src/assets/Demo2_en.jpg)
+![Transaction History Demo](/src/assets/Demo3_en.jpg)
 
 ---
 

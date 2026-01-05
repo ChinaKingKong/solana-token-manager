@@ -63,7 +63,7 @@ const isValidSolanaAddress = (address: string): boolean => {
 // 验证Pinata API密钥
 const validateApiKey = async () => {
   if (!pinataApiKey.value || !pinataSecretApiKey.value) {
-    message.error('请输入Pinata API密钥');
+    message.error(t('setMetadata.enterPinataApiKey'));
     apiKeyValid.value = false;
     return false;
   }
@@ -350,7 +350,7 @@ const submitMetadata = async () => {
       message.error(t('setMetadata.permissionDenied'));
     } else if (error.message?.includes('0x0') || error.message?.includes('Insufficient')) {
       message.error(t('setMetadata.insufficientFunds'));
-    } else if (error.message?.includes('交易模拟失败')) {
+    } else if (error.message?.includes('Simulation failed') || error.message?.includes('simulation failed')) {
       message.error(error.message);
     } else if (error.logs && Array.isArray(error.logs)) {
       // 尝试从日志中提取错误信息
@@ -388,13 +388,13 @@ const convertToIpfsIo = () => {
       const cid = parts[1].trim();
       if (cid) {
         metadataUrl.value = `https://ipfs.io/ipfs/${cid}`;
-        message.success('已转换为IPFS.io链接');
+        message.success(t('setMetadata.convertToIpfsSuccess'));
         return;
       }
     }
-    message.error('无法转换链接，CID格式不正确');
+    message.error(t('setMetadata.convertToIpfsFailed'));
   } else {
-    message.info('当前不是Pinata链接，无需转换');
+    message.info(t('setMetadata.convertToIpfsNotNeeded'));
   }
 };
 
@@ -537,12 +537,12 @@ defineOptions({
             <div class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
               <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
               <div class="flex-1">
-                <div class="text-sm font-medium text-solana-green mb-1">元数据说明</div>
+                <div class="text-sm font-medium text-solana-green mb-1">{{ t('setMetadata.metadataDescription') }}</div>
                 <div class="text-xs text-white/70">
                   <ul class="m-0 pl-4 space-y-1">
-                    <li>代币元数据包含名称、符号、描述等信息</li>
-                    <li>元数据将上传到IPFS，获得永久存储的链接</li>
-                    <li>设置元数据后，代币信息将在钱包和浏览器中显示</li>
+                    <li>{{ t('setMetadata.metadataDescription1') }}</li>
+                    <li>{{ t('setMetadata.metadataDescription2') }}</li>
+                    <li>{{ t('setMetadata.metadataDescription3') }}</li>
                   </ul>
                 </div>
               </div>
@@ -644,7 +644,7 @@ defineOptions({
 
           <!-- Pinata API配置（仅在上传模式显示） -->
           <div v-if="metadataSourceMode === 'upload'" class="bg-white/5 rounded-xl p-4 border border-white/10">
-            <h3 class="m-0 text-lg font-semibold text-white mb-4">Pinata IPFS配置</h3>
+            <h3 class="m-0 text-lg font-semibold text-white mb-4">{{ t('setMetadata.pinataIpfsConfig') }}</h3>
             <div class="space-y-4">
               <div>
                 <label class="block text-sm font-medium text-white/90 mb-2">
@@ -652,7 +652,7 @@ defineOptions({
                 </label>
                 <a-input
                   v-model:value="pinataApiKey"
-                  placeholder="输入你的Pinata API Key"
+                  :placeholder="t('setMetadata.enterPinataApiKey')"
                   size="large"
                   class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
                   :class="{ '!border-solana-green': pinataApiKey }"
@@ -665,7 +665,7 @@ defineOptions({
                 </label>
                 <a-input
                   v-model:value="pinataSecretApiKey"
-                  placeholder="输入你的Pinata Secret API Key"
+                  :placeholder="t('ipfsUpload.enterPinataSecretKey')"
                   type="password"
                   size="large"
                   class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
@@ -682,16 +682,16 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  验证API密钥
+                  {{ t('setMetadata.validateApiKey') }}
                 </a-button>
                 <div v-if="apiKeyValid" class="flex items-center gap-2 text-green-400">
                   <CheckCircleOutlined />
-                  <span class="text-sm">API密钥已验证</span>
+                  <span class="text-sm">{{ t('ipfsUpload.apiKeyValidated') }}</span>
                 </div>
               </div>
               
               <div class="text-xs text-white/50">
-                注意: 直接在浏览器中调用Pinata API，API密钥将暴露在前端代码中。生产环境中应使用后端服务处理上传。
+                {{ t('ipfsUpload.securityNote') }}
               </div>
             </div>
           </div>
@@ -709,19 +709,19 @@ defineOptions({
               <template #icon>
                 <UploadOutlined />
               </template>
-              {{ uploadingMetadata ? '上传中...' : '上传元数据到IPFS' }}
+              {{ uploadingMetadata ? t('setMetadata.uploadingMetadata') : t('setMetadata.uploadMetadataToIpfs') }}
             </a-button>
           </div>
 
           <!-- 元数据URL -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              元数据URL (IPFS链接) <span class="text-red-400">*</span>
+              {{ t('setMetadata.metadataUrlLabel') }} <span class="text-red-400">*</span>
             </label>
             <div class="flex items-center gap-2">
               <a-input
                 v-model:value="metadataUrl"
-                placeholder="例如: https://ipfs.io/ipfs/..."
+                :placeholder="t('setMetadata.metadataUrlPlaceholderExample')"
                 size="large"
                 class="flex-1 bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
                 :class="{ '!border-solana-green': metadataUrl }"
@@ -733,27 +733,27 @@ defineOptions({
                 <template #icon>
                   <GlobalOutlined />
                 </template>
-                转换
+                {{ t('ipfsUpload.convert') }}
               </a-button>
             </div>
             <div class="mt-1.5 text-xs text-white/50">
-              {{ metadataSourceMode === 'upload' ? '此URL应指向包含代币详细信息的JSON文件' : '输入已有的IPFS链接或元数据URL' }}
+              {{ metadataSourceMode === 'upload' ? t('setMetadata.metadataUrlDescUpload') : t('setMetadata.metadataUrlDescExisting') }}
             </div>
           </div>
 
           <!-- 元数据预览 -->
           <div v-if="metadataJson" class="bg-white/5 rounded-xl p-4 border border-white/10">
-            <h3 class="m-0 text-base font-semibold text-white mb-4">元数据预览</h3>
+            <h3 class="m-0 text-base font-semibold text-white mb-4">{{ t('setMetadata.metadataPreview') }}</h3>
             <pre class="text-xs text-white/80 font-mono bg-white/5 rounded-lg p-4 border border-white/10 overflow-auto max-h-64">{{ JSON.stringify(metadataJson, null, 2) }}</pre>
           </div>
 
           <!-- 权限设置 -->
           <div class="bg-white/5 rounded-xl p-4 border border-white/10">
             <a-checkbox v-model:checked="modifyAfterMint" class="text-white/90">
-              允许在铸币后修改元数据
+              {{ t('setMetadata.allowModifyAfterMint') }}
             </a-checkbox>
             <div class="mt-2 text-xs text-white/50">
-              选中后，您将保留修改元数据的权限
+              {{ t('setMetadata.allowModifyAfterMintDesc') }}
             </div>
           </div>
 
@@ -762,14 +762,14 @@ defineOptions({
             class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
             <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
             <div class="flex-1">
-              <div class="text-sm font-medium text-solana-green mb-1">设置提示</div>
+              <div class="text-sm font-medium text-solana-green mb-1">{{ t('setMetadata.setTip') }}</div>
               <div class="text-xs text-white/70">
                 <ul class="m-0 pl-4 space-y-1">
-                  <li v-if="metadataSourceMode === 'upload'">请先填写代币信息并上传元数据到IPFS</li>
-                  <li v-else>请填写代币信息并输入已有的元数据URL</li>
-                  <li>确保元数据URL正确且可访问</li>
-                  <li>设置元数据后，代币信息将在钱包和浏览器中显示</li>
-                  <li v-if="metadataSourceMode === 'existing'">使用已有链接模式：直接输入IPFS链接或元数据URL，无需上传</li>
+                  <li v-if="metadataSourceMode === 'upload'">{{ t('setMetadata.setTip1') }}</li>
+                  <li v-else>{{ t('setMetadata.setTip2') }}</li>
+                  <li>{{ t('setMetadata.setTip3') }}</li>
+                  <li>{{ t('setMetadata.setTip4') }}</li>
+                  <li v-if="metadataSourceMode === 'existing'">{{ t('setMetadata.setTip5') }}</li>
                 </ul>
               </div>
             </div>
@@ -788,7 +788,7 @@ defineOptions({
               <template #icon>
                 <FileTextOutlined />
               </template>
-              {{ processing ? '设置中...' : '设置元数据' }}
+              {{ processing ? t('setMetadata.setting') : t('setMetadata.set') }}
             </a-button>
           </div>
         </div>

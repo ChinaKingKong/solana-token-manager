@@ -238,7 +238,7 @@ defineOptions({
             <CheckCircleOutlined class="text-3xl text-[#52c41a]" />
             <div>
               <h3 class="m-0 text-xl font-semibold text-white">{{ t('createToken.createSuccess') }}</h3>
-              <p class="m-0 text-sm text-white/60 mt-1">{{ t('createToken.createSuccess') }}</p>
+              <p class="m-0 text-sm text-white/60 mt-1">{{ t('createToken.successMessage') }}</p>
             </div>
           </div>
 
@@ -377,12 +377,12 @@ defineOptions({
             class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
             <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
             <div class="flex-1">
-              <div class="text-sm font-medium text-solana-green mb-1">创建提示</div>
+              <div class="text-sm font-medium text-solana-green mb-1">{{ t('createToken.createTip') }}</div>
               <div class="text-xs text-white/70">
                 <ul class="m-0 pl-4 space-y-1">
-                  <li>创建代币需要支付一定的 SOL 作为租金（约 0.00144 SOL）</li>
-                  <li>代币创建后，Mint 地址将永久保存，请妥善保管</li>
-                  <li>建议在创建前确认所有信息无误</li>
+                  <li>{{ t('createToken.createTip1') }}</li>
+                  <li>{{ t('createToken.createTip2') }}</li>
+                  <li>{{ t('createToken.createTip3') }}</li>
                 </ul>
               </div>
             </div>

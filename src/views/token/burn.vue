@@ -90,7 +90,7 @@ const fetchTokenInfo = async () => {
     decimals.value = mintInfo.decimals;
     await fetchCurrentBalance();
   } catch (error: any) {
-    message.error(`获取代币信息失败: ${error.message || '请检查Mint地址'}`);
+    message.error(`${t('burnToken.fetchTokenInfoFailed')}: ${error.message || t('burnToken.checkMintAddress')}`);
     console.error('获取代币信息失败:', error);
     tokenInfo.value = null;
     currentBalance.value = 0;
@@ -128,7 +128,7 @@ const fetchCurrentBalance = async () => {
       currentBalance.value = 0;
     }
   } catch (error: any) {
-    message.error(`获取余额失败: ${error.message || '未知错误'}`);
+    message.error(`${t('burnToken.fetchBalanceFailed')}: ${error.message || t('burnToken.unknownError')}`);
     console.error('获取余额失败:', error);
     currentBalance.value = 0;
     ownerATA.value = '';
@@ -232,7 +232,7 @@ const executeBurn = async () => {
       message.warning(t('burnToken.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
       message.error(t('wallet.connectWallet'));
-    } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
+    } else if (error.message?.includes('insufficient funds') || error.message?.includes('Insufficient funds')) {
       message.error(t('burnToken.insufficientBalance'));
     } else {
       message.error(`${t('burnToken.burnFailed')}: ${error.message || t('common.error')}`);
@@ -318,8 +318,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
-        <p class="text-white/60">连接钱包后即可销毁代币</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('burnToken.connectWalletFirst') }}</h3>
+        <p class="text-white/60">{{ t('burnToken.connectWalletDesc') }}</p>
       </div>
     </div>
 
@@ -334,8 +334,8 @@ defineOptions({
           <div class="flex items-center gap-3 mb-6">
             <CheckCircleOutlined class="text-3xl text-[#52c41a]" />
             <div>
-              <h3 class="m-0 text-xl font-semibold text-white">代币销毁成功！</h3>
-              <p class="m-0 text-sm text-white/60 mt-1">代币已成功销毁，请查看交易详情</p>
+              <h3 class="m-0 text-xl font-semibold text-white">{{ t('burnToken.burnSuccess') }}</h3>
+              <p class="m-0 text-sm text-white/60 mt-1">{{ t('burnToken.successMessage') }}</p>
             </div>
           </div>
 
@@ -343,7 +343,7 @@ defineOptions({
             <!-- 交易签名 -->
             <div v-if="burnTransactionSignature" class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center gap-2 mb-2">
-                <span class="text-sm font-medium text-white/80">交易签名</span>
+                <span class="text-sm font-medium text-white/80">{{ t('burnToken.transactionSignature') }}</span>
               </div>
               <div class="flex items-center gap-2">
                 <div
@@ -355,7 +355,7 @@ defineOptions({
                   <template #icon>
                     <CopyOutlined />
                   </template>
-                  复制
+                  {{ t('common.copy') }}
                 </a-button>
                 <a-button @click="viewTransaction(burnTransactionSignature)"
                   class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
@@ -370,11 +370,11 @@ defineOptions({
             <!-- 代币信息 -->
             <div v-if="tokenInfo" class="grid grid-cols-2 gap-4">
               <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-                <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                <div class="text-xs font-medium text-white/60 mb-1">{{ t('burnToken.decimals') }}</div>
                 <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
               </div>
               <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-                <div class="text-xs font-medium text-white/60 mb-1">当前余额</div>
+                <div class="text-xs font-medium text-white/60 mb-1">{{ t('burnToken.currentBalance') }}</div>
                 <div class="text-base font-semibold text-white">
                   {{ currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
                 </div>
@@ -388,7 +388,7 @@ defineOptions({
                 <template #icon>
                   <FireOutlined />
                 </template>
-                继续销毁
+                {{ t('burnToken.continueBurn') }}
               </a-button>
             </div>
           </div>
@@ -407,23 +407,23 @@ defineOptions({
           <!-- Mint 地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              Mint 地址 <span class="text-red-400">*</span>
+              {{ t('burnToken.mintAddress') }} <span class="text-red-400">*</span>
             </label>
             <a-input
               v-model:value="tokenMintAddress"
-              placeholder="请输入代币的Mint地址"
+              :placeholder="t('burnToken.mintAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': tokenMintAddress }"
             />
-            <div class="mt-1.5 text-xs text-white/50">输入要销毁的代币的Mint地址</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('burnToken.mintAddressDesc') }}</div>
           </div>
 
           <!-- 代币信息显示 -->
           <div v-if="tokenInfo" class="space-y-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="m-0 text-base font-semibold text-white">代币信息</h3>
+                <h3 class="m-0 text-base font-semibold text-white">{{ t('burnToken.tokenInfo') }}</h3>
                 <div class="flex items-center gap-2">
                   <a-button
                     @click="viewOnSolscan(tokenMintAddress)"
@@ -442,17 +442,17 @@ defineOptions({
                     <template #icon>
                       <ReloadOutlined />
                     </template>
-                    刷新
+                    {{ t('burnToken.refresh') }}
                   </a-button>
                 </div>
               </div>
               <div class="grid grid-cols-2 gap-4">
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('burnToken.decimals') }}</div>
                   <div class="text-base font-semibold text-white">{{ tokenInfo.decimals }}</div>
                 </div>
                 <div class="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div class="text-xs font-medium text-white/60 mb-1">当前供应量</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('burnToken.currentSupply') }}</div>
                   <div class="text-sm font-semibold text-white truncate">
                     {{ (Number(tokenInfo.supply) / Math.pow(10, tokenInfo.decimals)).toLocaleString() }}
                   </div>
@@ -463,7 +463,7 @@ defineOptions({
             <!-- 当前余额 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium text-white/80">您的余额</span>
+                <span class="text-sm font-medium text-white/80">{{ t('burnToken.yourBalance') }}</span>
                 <a-button
                   @click="fetchCurrentBalance"
                   :loading="loadingBalance"
@@ -472,7 +472,7 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  刷新
+                  {{ t('burnToken.refresh') }}
                 </a-button>
               </div>
               <div class="text-2xl font-bold text-red-400 mb-2">
@@ -497,7 +497,7 @@ defineOptions({
           <!-- 销毁数量 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              销毁数量 <span class="text-red-400">*</span>
+              {{ t('burnToken.amount') }} <span class="text-red-400">*</span>
             </label>
             <div class="flex items-center gap-2">
               <a-input-number
@@ -507,9 +507,9 @@ defineOptions({
                 :precision="decimals"
                 :step="Math.pow(10, -decimals)"
                 size="large"
-                class="flex-1 bg-white/5 border-white/20 text-white rounded-xl"
+                class="flex-1 bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
                 :class="{ '!border-solana-green': burnAmount }"
-                placeholder="请输入销毁数量"
+                :placeholder="t('burnToken.amountPlaceholder')"
               />
               <a-button
                 @click="setMaxAmount"
@@ -519,10 +519,10 @@ defineOptions({
               </a-button>
             </div>
             <div class="mt-1.5 text-xs text-white/50">
-              最多支持 {{ decimals }} 位小数，当前余额: {{ currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }}
+              {{ t('burnToken.maxDecimals', { decimals, balance: currentBalance.toLocaleString(undefined, { maximumFractionDigits: decimals }) }) }}
             </div>
             <div v-if="burnAmount && parseFloat(burnAmount) > currentBalance" class="mt-1.5 text-xs text-red-400">
-              销毁数量不能超过当前余额
+              {{ t('burnToken.amountExceedsBalance') }}
             </div>
           </div>
 
@@ -531,13 +531,13 @@ defineOptions({
             class="flex items-start gap-3 p-4 bg-[rgba(255,77,79,0.1)] rounded-xl border border-[rgba(255,77,79,0.2)]">
             <ExclamationCircleOutlined class="text-red-400 text-lg shrink-0 mt-0.5" />
             <div class="flex-1">
-              <div class="text-sm font-medium text-red-400 mb-1">销毁警告</div>
+              <div class="text-sm font-medium text-red-400 mb-1">{{ t('burnToken.burnWarning') }}</div>
               <div class="text-xs text-white/70">
                 <ul class="m-0 pl-4 space-y-1">
-                  <li>销毁代币是不可逆的操作，一旦销毁，代币将永久从流通中移除</li>
-                  <li>销毁操作需要支付交易费用(gas fee)</li>
-                  <li>请确保您的钱包中有足够的 SOL 支付交易费用</li>
-                  <li>建议先销毁小额测试</li>
+                  <li>{{ t('burnToken.burnWarning1') }}</li>
+                  <li>{{ t('burnToken.burnWarning2') }}</li>
+                  <li>{{ t('burnToken.burnWarning3') }}</li>
+                  <li>{{ t('burnToken.burnWarning4') }}</li>
                 </ul>
               </div>
             </div>
@@ -557,7 +557,7 @@ defineOptions({
               <template #icon>
                 <FireOutlined />
               </template>
-              {{ burning ? '销毁中...' : '销毁代币' }}
+              {{ burning ? t('burnToken.burning') : t('burnToken.burn') }}
             </a-button>
           </div>
         </div>
@@ -595,7 +595,8 @@ defineOptions({
   box-shadow: 0 0 0 2px rgba(20, 241, 149, 0.2) !important;
 }
 
-:deep(.ant-input::placeholder) {
+:deep(.ant-input::placeholder),
+:deep(.ant-input-number-input::placeholder) {
   color: rgba(255, 255, 255, 0.4) !important;
 }
 
