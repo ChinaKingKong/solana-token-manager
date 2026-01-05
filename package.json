@@ -34,7 +34,7 @@
     "vite": "^5.1.5",
     "vue-tsc": "^2.0.6"
   },
-  "description": "Solana代币管理系统，用于创建、铸造、管理Solana上的代币",
-  "author": "Your Name",
+  "description": "A comprehensive Solana SPL token management system built with Vue 3, TypeScript, and Solana blockchain.",
+  "author": "KingKong",
   "license": "MIT"
 }
