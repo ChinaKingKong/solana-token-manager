@@ -38,8 +38,10 @@ npm --version   # Should be >= 9.0.0
 
 - **Token List**：View your Solana tokens, including SOL and SPL tokens, with real-time balance refresh
   - Tokens sorted by creation time (newest first)
+  - Token balance displayed with 1 decimal place
   - Saved mint addresses with dropdown selection
   - Quick transfer action from token list
+  - 8 items per page pagination
 - **Create Token**：Create new Solana SPL tokens with customizable name, symbol, decimals, and permissions
   - Automatically saves created mint addresses to local storage
 - **Mint Token**：Mint tokens to specified wallet addresses with automatic associated account creation
@@ -70,6 +72,7 @@ npm --version   # Should be >= 9.0.0
 - **Transaction Records**：View all transaction history for your wallet
   - Displays specific count of loaded transactions in success message
   - Pagination with 10 items per page
+  - Address display format: 8 characters at start + 5 dots + 8 characters at end
 - **Transaction Details**：View detailed information for each transaction
   - Instruction details, account balance changes, transaction logs
   - Full transaction data display
@@ -80,7 +83,16 @@ npm --version   # Should be >= 9.0.0
 - **Multi-Wallet Support**：Support for Phantom and Coinbase wallets
 - **Network Switching**：Support for Mainnet and Devnet switching
 - **Dynamic RPC**：Automatic RPC endpoint switching based on network
+- **Wallet Switch Detection**：Automatically detects wallet switches and refreshes data
 - **Internationalization**：Support for Chinese and English languages
+
+### SOL Faucet (Devnet Only)
+
+- **Request Test SOL**：Request 2 SOL test tokens on devnet
+  - Only available on devnet network
+  - 8-hour cooldown period between requests
+  - Per-wallet request tracking (independent records for each wallet address)
+  - Automatic balance refresh after successful request
 
 ## Tech Stack
 
@@ -131,8 +143,10 @@ src/
 │   │   └── index.vue   # IPFS Upload
 │   ├── metadata/       # Metadata Related
 │   │   └── index.vue   # Set Metadata
-│   └── history/        # Transaction History
-│       └── index.vue   # Transaction History Records
+│   ├── history/        # Transaction History
+│   │   └── index.vue   # Transaction History Records
+│   └── faucet/         # SOL Faucet (Devnet Only)
+│       └── index.vue   # Request Test SOL
 ├── utils/              # Utility Functions
 │   ├── ipfs.ts         # IPFS Upload Utility
 │   ├── metadata.ts     # Metaplex Metadata Operations
@@ -350,6 +364,15 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for more detailed information.
 4. Upload content to IPFS
 5. Copy the generated IPFS link
 
+### SOL Faucet (Devnet Only)
+
+1. Switch to devnet network
+2. Go to the "SOL Faucet" page (only visible on devnet)
+3. Connect your wallet
+4. Click "Request 2 SOL" button
+5. Wait for transaction confirmation
+6. Each wallet can request once every 8 hours
+
 ## Configuration
 
 ### RPC Endpoint Configuration
@@ -389,6 +412,8 @@ Reference Documentation: [Pinata Quickstart](https://docs.pinata.cloud/quickstar
 - **Freeze Management**：When freezing/thawing, enter the wallet address instead of the ATA address. The system will automatically calculate the ATA address
 - **Irreversible Operations**：Burning tokens is an irreversible operation, please operate with caution
 - **Testing Recommendations**：It is recommended to test functions on the testnet first, and then operate on the mainnet after confirmation
+- **SOL Faucet**：Only available on devnet. Each wallet address has independent request records and cooldown timers. When switching wallets, the request records and countdown will reset for the new wallet
+- **Token Display**：Token balances in the token list are displayed with 1 decimal place for better readability
 
 ## License
 
