@@ -1,0 +1,17 @@
+{
+  "name": "Mask Token",
+  "symbol": "MKT",
+  "description": "Mask Token on Solana",
+  "image": "https://www.stableflow.app/images/WUSD.png",
+  "external_url": "https://www.stableflow.app",
+  "attributes": [
+    {
+      "trait_type": "Type",
+      "value": "Mask Token"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana"
+    }
+  ]
+} 

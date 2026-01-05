@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
-import { message, Upload } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import type { UploadProps } from 'ant-design-vue';
 import { 
   uploadFileToIPFS, 
@@ -132,13 +132,26 @@ const beforeUpload: UploadProps['beforeUpload'] = (file) => {
   if (!isLt10M) {
     message.error('文件大小不能超过10MB!');
   }
-  return isLt10M || Upload.LIST_IGNORE;
+  // 阻止自动上传，返回 false 或 Upload.LIST_IGNORE
+  return false;
 };
 
 // 处理文件变更
 const handleFileChange = (info: any) => {
   let newFileList = [...info.fileList];
   newFileList = newFileList.slice(-1); // 只保留最后一个文件
+  
+  // 移除上传状态，只保留文件信息
+  newFileList = newFileList.map(file => {
+    if (file.status === 'uploading') {
+      return {
+        ...file,
+        status: 'done' as const,
+      };
+    }
+    return file;
+  });
+  
   fileList.value = newFileList;
 };
 
@@ -499,7 +512,7 @@ defineOptions({
               :beforeUpload="beforeUpload"
               @change="handleFileChange"
               :multiple="false"
-              :showUploadList="true"
+              :showUploadList="{ showRemoveIcon: true, showPreviewIcon: false }"
               accept="image/*,application/json"
               :customRequest="() => {}"
               class="bg-white/5 border-white/20 rounded-xl"
@@ -589,8 +602,10 @@ defineOptions({
                   class="flex-1 px-4 py-2.5 bg-white/5 rounded-lg border border-white/10 text-sm font-mono text-white/90 break-all">
                   {{ uploadedUrl }}
                 </div>
-                <a-button @click="copyUrl(uploadedUrl)"
-                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                <a-button
+                  type="text"
+                  @click="copyUrl(uploadedUrl)"
+                  class="flex items-center justify-center text-white px-4 py-2.5 h-auto transition-all duration-300 ease-in-out hover:text-solana-green">
                   <template #icon>
                     <CopyOutlined />
                   </template>
@@ -618,8 +633,10 @@ defineOptions({
                   class="flex-1 px-4 py-2.5 bg-white/5 rounded-lg border border-white/10 text-sm font-mono text-white/90 break-all">
                   {{ actualNewUrl }}
                 </div>
-                <a-button @click="copyActualNewUrl"
-                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                <a-button
+                  type="text"
+                  @click="copyActualNewUrl"
+                  class="flex items-center justify-center text-white px-4 py-2.5 h-auto transition-all duration-300 ease-in-out hover:text-solana-green">
                   <template #icon>
                     <CopyOutlined />
                   </template>
@@ -640,9 +657,9 @@ defineOptions({
               <div class="flex items-center justify-between mb-4">
                 <h3 class="m-0 text-base font-semibold text-white">已上传的JSON内容</h3>
                 <a-button
-                  type="primary"
+                  type="text"
                   @click="editUploadedJson"
-                  class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
+                  class="flex items-center justify-center text-white px-4 py-2.5 h-auto transition-all duration-300 ease-in-out hover:text-solana-green">
                   <template #icon>
                     <EditOutlined />
                   </template>
@@ -734,6 +751,47 @@ defineOptions({
 :deep(.ant-upload-list-item) {
   background-color: rgba(255, 255, 255, 0.05) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* 调整附件图标左边距 */
+:deep(.ant-upload-list-item-icon) {
+  margin-left: 16px !important;
+}
+
+:deep(.ant-upload-list-item .anticon) {
+  margin-left: 16px !important;
+}
+
+/* 隐藏上传列表中的上传图标和进度 */
+:deep(.ant-upload-list-item-uploading) {
+  pointer-events: none;
+}
+
+:deep(.ant-upload-list-item-uploading .ant-upload-icon) {
+  display: none !important;
+}
+
+:deep(.ant-upload-list-item-uploading .anticon-loading) {
+  display: none !important;
+}
+
+:deep(.ant-upload-list-item .ant-upload-list-item-progress) {
+  display: none !important;
+}
+
+/* 文本按钮样式 */
+:deep(.ant-btn-text) {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+:deep(.ant-btn-text:hover) {
+  background: transparent !important;
+  border: none !important;
+  color: #14f195 !important;
 }
 
 /* 单选按钮组样式 */
