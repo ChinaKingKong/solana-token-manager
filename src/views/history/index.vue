@@ -251,7 +251,7 @@ const getTransactionType = (tx: any) => {
 const formatAddress = (address: string | number | null | undefined) => {
   if (!address) return '';
   const addressStr = String(address);
-  return `${addressStr.slice(0, 12)}.....${addressStr.slice(-12)}`;
+  return `${addressStr.slice(0, 8)}.....${addressStr.slice(-8)}`;
 };
 
 // 解析代币转账详情
