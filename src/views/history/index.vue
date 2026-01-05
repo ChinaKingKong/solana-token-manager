@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { message } from 'ant-design-vue';
 import { useI18n } from 'vue-i18n'; 
 import { useWallet } from '../../hooks/useWallet';
@@ -58,7 +58,8 @@ const handlePageChange = (page: number) => {
 };
 
 // 获取交易历史
-const fetchTransactionHistory = async () => {
+// showSuccessMessage: 是否显示成功提示消息（仅在用户主动操作时显示）
+const fetchTransactionHistory = async (showSuccessMessage: boolean = false) => {
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
     message.error(t('wallet.connectWallet'));
     return;
@@ -100,9 +101,25 @@ const fetchTransactionHistory = async () => {
       })
     );
 
-    transactions.value = transactionDetails;
-    currentPage.value = 1; // 重置到第一页
-    message.success(t('transactionHistory.loadSuccess', { count: transactionDetails.length }));
+    // 确保数据加载成功后再设置和显示消息
+    if (transactionDetails && transactionDetails.length > 0) {
+      transactions.value = transactionDetails;
+      currentPage.value = 1; // 重置到第一页
+      
+      // 只在需要显示成功消息时（用户主动操作）才显示
+      if (showSuccessMessage) {
+        // 等待数据设置完成，确保响应式更新
+        await nextTick();
+        
+        // 再等待一小段时间，确保数据已完全加载到 DOM
+        setTimeout(() => {
+          message.success(t('transactionHistory.loadSuccess', { count: transactionDetails.length }));
+        }, 50);
+      }
+    } else {
+      transactions.value = [];
+      currentPage.value = 1;
+    }
   } catch (error) {
     message.error(t('transactionHistory.loadFailed'));
   } finally {
@@ -412,7 +429,8 @@ const getTransactionLogs = (tx: any) => {
 // 监听钱包连接状态
 watch(() => walletState.value?.connected, (isConnected) => {
   if (isConnected && walletState.value?.publicKey) {
-    fetchTransactionHistory();
+    // 自动刷新时不显示成功消息
+    fetchTransactionHistory(false);
   } else {
     transactions.value = [];
     currentPage.value = 1;
@@ -424,13 +442,13 @@ watch(() => walletState.value?.publicKey?.toBase58(), (newPublicKey, oldPublicKe
   // 当公钥变化且钱包已连接时，刷新交易历史
   if (walletState.value?.connected) {
     if (newPublicKey && oldPublicKey && newPublicKey !== oldPublicKey) {
-      // 钱包切换：清空列表并重新加载
+      // 钱包切换：清空列表并重新加载（不显示成功消息）
       transactions.value = [];
       currentPage.value = 1;
-      fetchTransactionHistory();
+      fetchTransactionHistory(false);
     } else if (newPublicKey && !oldPublicKey) {
-      // 新连接：加载交易历史
-      fetchTransactionHistory();
+      // 新连接：加载交易历史（不显示成功消息）
+      fetchTransactionHistory(false);
     } else if (!newPublicKey && oldPublicKey) {
       // 断开连接：清空列表
       transactions.value = [];
@@ -439,11 +457,17 @@ watch(() => walletState.value?.publicKey?.toBase58(), (newPublicKey, oldPublicKe
   }
 });
 
-// 组件挂载时加载交易历史
-onMounted(() => {
-  if (walletState.value?.connected && walletState.value?.publicKey) {
-    fetchTransactionHistory();
-  }
+// 组件挂载时加载交易历史（等待页面加载完成后再请求）
+onMounted(async () => {
+  // 等待 DOM 完全渲染完成
+  await nextTick();
+  // 再延迟一小段时间，确保页面完全加载
+  setTimeout(() => {
+    if (walletState.value?.connected && walletState.value?.publicKey) {
+      // 页面首次加载时不显示成功消息
+      fetchTransactionHistory(false);
+    }
+  }, 100);
 });
 
 // 默认导出
@@ -479,7 +503,7 @@ defineOptions({
       <a-button
         type="primary"
         :loading="loading"
-        @click="fetchTransactionHistory"
+        @click="fetchTransactionHistory(true)"
               class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-2.5 h-auto text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300">
         <template #icon>
           <ReloadOutlined />
