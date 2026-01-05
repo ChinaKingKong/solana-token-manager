@@ -49,5 +49,10 @@
   ],
   "env": {
     "NODE_VERSION": "18"
+  },
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
   }
 }

@@ -274,9 +274,29 @@ The project is pre-configured for Vercel deployment. For detailed deployment ins
    - **Important**: All variables must start with `VITE_` prefix
    - After adding variables, trigger a **Redeploy**
 
-4. **Done!**
+4. **Create a tag to trigger production deployment**
+   ```bash
+   # Create and push a version tag
+   git tag v1.0.0 -m "Production release v1.0.0"
+   git push origin v1.0.0
+   ```
+
+5. **Done!**
    - Your app will be available at `https://your-project.vercel.app`
-   - Vercel will automatically deploy on every push to the main branch
+   - Vercel will automatically deploy when you push new tags
+
+**Workflow:**
+
+```bash
+# Daily development (won't trigger deployment)
+git add .
+git commit -m "feat: add new feature"
+git push origin main
+
+# When ready to release (triggers deployment)
+git tag v1.1.0 -m "Release v1.1.0"
+git push origin v1.1.0
+```
 
 **Alternative: Deploy using Vercel CLI**
 
