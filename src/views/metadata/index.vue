@@ -83,7 +83,6 @@ const validateApiKey = async () => {
     
     return isValid;
   } catch (error) {
-    console.error('验证API密钥时出错:', error);
     message.error('验证API密钥时出错');
     apiKeyValid.value = false;
     return false;
@@ -140,7 +139,6 @@ const uploadMetadataToIPFS = async () => {
       message.error('上传元数据失败');
     }
   } catch (error) {
-    console.error('上传元数据失败:', error);
     message.error('上传元数据失败');
   } finally {
     uploadingMetadata.value = false;
@@ -201,7 +199,6 @@ const submitMetadata = async () => {
       mintPubkey = new PublicKey(tokenMintAddress.value.trim());
     } catch (error) {
       message.error('代币Mint地址格式无效');
-      console.error('创建 PublicKey 失败:', error);
       return;
     }
 
@@ -228,23 +225,16 @@ const submitMetadata = async () => {
       actualMintAuthority = mintInfo.mintAuthority;
     } catch (error) {
       message.error('代币不存在或地址无效');
-      console.error('获取 Mint 信息失败:', error);
       return;
     }
 
     // 获取 Metadata PDA
     const metadataPDA = getMetadataPDA(mintPubkey);
-    console.log('📝 Metadata PDA:', metadataPDA.toString());
 
     // 验证字符串长度
     const nameBytes = Buffer.from(tokenName.value.trim(), 'utf8').length;
     const symbolBytes = Buffer.from(tokenSymbol.value.trim(), 'utf8').length;
     const uriBytes = Buffer.from(metadataUrl.value.trim(), 'utf8').length;
-
-    console.log('📏 字符串长度检查:');
-    console.log('  Name:', tokenName.value.trim(), `(${nameBytes} bytes)`);
-    console.log('  Symbol:', tokenSymbol.value.trim(), `(${symbolBytes} bytes)`);
-    console.log('  URI:', metadataUrl.value.trim(), `(${uriBytes} bytes)`);
 
     if (nameBytes > 32) {
       message.error(`代币名称过长 (${nameBytes}/32 字节)，请缩短名称`);
@@ -264,13 +254,8 @@ const submitMetadata = async () => {
     try {
       const accountInfo = await conn.getAccountInfo(metadataPDA);
       metadataExists = accountInfo !== null && accountInfo.owner.equals(TOKEN_METADATA_PROGRAM_ID);
-      console.log('🔍 Metadata 账户存在:', metadataExists);
-      if (metadataExists && accountInfo) {
-        console.log('  Metadata 账户所有者:', accountInfo.owner.toString());
-      }
     } catch (error) {
       metadataExists = false;
-      console.error('检查 Metadata 账户时出错:', error);
     }
 
     // 准备元数据数据（使用 trim 后的值）
@@ -286,13 +271,11 @@ const submitMetadata = async () => {
     if (metadataExists) {
       // 如果元数据账户已存在，使用更新指令
       // 注意：需要确保当前钱包是 update authority
-      console.log('📝 使用更新元数据指令');
       const updateInstruction = createUpdateMetadataAccountV2Instruction(
         metadataPDA,
         updateAuthority,
         metadataData
       );
-      console.log('指令数据 (hex):', updateInstruction.data.toString('hex'));
       transaction.add(updateInstruction);
     } else {
       // 如果元数据账户不存在，使用创建指令
@@ -308,12 +291,6 @@ const submitMetadata = async () => {
         return;
       }
 
-      console.log('✨ 使用创建元数据指令');
-      console.log('  Mint Authority:', actualMintAuthority.toString());
-      console.log('  Payer:', updateAuthority.toString());
-      console.log('  Update Authority:', updateAuthority.toString());
-      console.log('  Is Mutable:', modifyAfterMint.value);
-
       const createInstruction = createCreateMetadataAccountV3Instruction(
         metadataPDA,
         mintPubkey,
@@ -323,14 +300,6 @@ const submitMetadata = async () => {
         metadataData,
         modifyAfterMint.value
       );
-
-      console.log('指令数据 (hex):', createInstruction.data.toString('hex'));
-      console.log('指令账户数量:', createInstruction.keys.length);
-      console.log('指令账户列表:');
-      createInstruction.keys.forEach((key, index) => {
-        console.log(`  [${index}] ${key.pubkey.toString()}`);
-        console.log(`      signer: ${key.isSigner}, writable: ${key.isWritable}`);
-      });
 
       transaction.add(createInstruction);
     }
@@ -345,8 +314,6 @@ const submitMetadata = async () => {
     try {
       signature = await wallet.sendTransaction(transaction, conn);
     } catch (sendError: any) {
-      console.error('发送交易失败:', sendError);
-      
       // 如果直接发送失败，尝试先签名再发送
       if (typeof wallet.signTransaction === 'function') {
         try {
@@ -356,7 +323,6 @@ const submitMetadata = async () => {
             maxRetries: 3,
           });
         } catch (signError: any) {
-          console.error('签名并发送交易失败:', signError);
           throw sendError;
         }
       } else {
@@ -370,15 +336,6 @@ const submitMetadata = async () => {
     metadataSuccess.value = true;
     message.success('元数据设置成功!');
   } catch (error: any) {
-    console.error('设置元数据失败:', error);
-    console.error('错误堆栈:', error.stack);
-    console.error('错误详情:', {
-      message: error.message,
-      name: error.name,
-      code: error.code,
-      logs: error.logs,
-    });
-    
     // 处理特定错误
     if (error.message?.includes('User rejected') || error.message?.includes('用户取消')) {
       message.warning('您已取消交易');
@@ -403,7 +360,6 @@ const submitMetadata = async () => {
     } else {
       const errorMsg = error.message || '未知错误';
       message.error(`设置元数据失败: ${errorMsg}`);
-      console.error('详细错误信息:', error);
     }
   } finally {
     processing.value = false;

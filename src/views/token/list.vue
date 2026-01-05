@@ -4,6 +4,7 @@ import { message } from 'ant-design-vue';
 import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined, PlusOutlined } from '@ant-design/icons-vue';
 import { PublicKey } from '@solana/web3.js';
 import { useWallet } from '../../hooks/useWallet';
+import { fetchOnChainMetadata } from '../../utils/metadata';
 
 // 代币数据接口
 interface TokenData {
@@ -250,10 +251,39 @@ const fetchTokenList = async () => {
   }
 };
 
-// 获取代币元数据
+// 获取代币元数据（优先从链上获取，失败则从 token list 获取）
 const fetchTokenMetadata = async () => {
-  try {
+  const conn = connection.value;
+  if (!conn) {
+    return;
+  }
 
+  // 并行获取所有代币的链上元数据
+  const metadataPromises = tokens.value.map(async (token) => {
+    try {
+      const mintPubkey = new PublicKey(token.mint);
+      const onChainMetadata = await fetchOnChainMetadata(conn, mintPubkey);
+      
+      if (onChainMetadata && (onChainMetadata.name || onChainMetadata.symbol)) {
+        return {
+          ...token,
+          name: onChainMetadata.name || token.name,
+          symbol: onChainMetadata.symbol || token.symbol,
+          logoURI: onChainMetadata.logoURI || token.logoURI,
+        };
+      }
+      return token;
+    } catch (error) {
+      // 如果链上获取失败，返回原始 token
+      return token;
+    }
+  });
+
+  // 等待所有元数据获取完成
+  tokens.value = await Promise.all(metadataPromises);
+
+  // 对于没有链上元数据的代币，尝试从 token list 获取
+  try {
     const response = await fetch('https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json', {
       method: 'GET',
       headers: {
@@ -261,28 +291,30 @@ const fetchTokenMetadata = async () => {
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    if (response.ok) {
+      const tokenList = await response.json();
+
+      tokens.value = tokens.value.map(token => {
+        // 如果已经有元数据，跳过
+        if (token.name && token.symbol) {
+          return token;
+        }
+
+        // 尝试从 token list 获取
+        const metadata = tokenList.tokens.find((t: any) => t.address === token.mint);
+        if (metadata) {
+          return {
+            ...token,
+            symbol: token.symbol || metadata.symbol,
+            name: token.name || metadata.name,
+            logoURI: token.logoURI || metadata.logoURI,
+          };
+        }
+        return token;
+      });
     }
-
-    const tokenList = await response.json();
-
-    tokens.value = tokens.value.map(token => {
-      const metadata = tokenList.tokens.find((t: any) => t.address === token.mint);
-      if (metadata) {
-        return {
-          ...token,
-          symbol: metadata.symbol,
-          name: metadata.name,
-          logoURI: metadata.logoURI,
-        };
-      }
-      return token;
-    });
-
   } catch (error: any) {
-    // 元数据获取失败不影响显示，只是没有图标和名称
-    message.warning('获取代币元数据失败，将显示默认信息');
+    // token list 获取失败不影响显示
   }
 };
 
