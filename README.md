@@ -10,26 +10,68 @@ A comprehensive Solana SPL token management system built with Vue 3, TypeScript,
 
 ---
 
+## Requirements
+
+### Environment Requirements
+
+- **Node.js**: >= 18.0.0 (Recommended: 18.x or 20.x LTS)
+- **npm**: >= 9.0.0 (or yarn >= 1.22.0)
+- **Browser**: Modern browsers that support ES6+ (Chrome, Firefox, Edge, Safari)
+
+### Recommended Tools
+
+- **Node Version Manager**: Use [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm) to manage Node.js versions
+- **Package Manager**: npm (comes with Node.js) or yarn
+
+### Verify Installation
+
+Check your Node.js and npm versions:
+
+```bash
+node --version  # Should be >= 18.0.0
+npm --version   # Should be >= 9.0.0
+```
+
 ## Features
 
 ### Token Management
 
 - **Token List**：View your Solana tokens, including SOL and SPL tokens, with real-time balance refresh
+  - Tokens sorted by creation time (newest first)
+  - Saved mint addresses with dropdown selection
+  - Quick transfer action from token list
 - **Create Token**：Create new Solana SPL tokens with customizable name, symbol, decimals, and permissions
+  - Automatically saves created mint addresses to local storage
 - **Mint Token**：Mint tokens to specified wallet addresses with automatic associated account creation
+  - Mint address input with saved addresses dropdown
+  - Support for both dropdown selection and manual input
 - **Transfer Token**：Transfer tokens to other addresses with automatic recipient account creation
+  - Mint address input with saved addresses dropdown
 - **Burn Token**：Burn held tokens to reduce total token supply
+  - Mint address input with saved addresses dropdown
 - **Freeze Management**：Freeze and thaw token accounts (requires freeze authority)
+  - Mint address input with saved addresses dropdown
+  - Permission status display
 
 ### IPFS and Metadata
 
 - **IPFS Upload**：Upload files and JSON metadata to IPFS (using Pinata)
+  - Support for file upload and JSON content upload
+  - Pinata API key configuration
+  - URL update and content replacement features
 - **Set Metadata**：Set and update token metadata
+  - Mint address input with saved addresses dropdown
+  - Support for creating and updating metadata
+  - Automatic preservation of existing metadata fields (sellerFeeBasisPoints, creators)
 
 ### Transaction History
 
 - **Transaction Records**：View all transaction history for your wallet
+  - Displays specific count of loaded transactions in success message
+  - Pagination with 10 items per page
 - **Transaction Details**：View detailed information for each transaction
+  - Instruction details, account balance changes, transaction logs
+  - Full transaction data display
 - **Statistics**：Display total transactions, success/failure statistics
 
 ### Wallet Features
@@ -60,7 +102,10 @@ src/
 ├── components/          # Public Components
 │   ├── Header.vue      # Top Navigation Bar
 │   ├── Sidebar.vue     # Sidebar Menu
-│   └── wallet.vue       # Wallet Connection Component
+│   ├── wallet.vue      # Wallet Connection Component
+│   └── MintAddressInput.vue  # Reusable Mint Address Input Component
+├── composables/         # Composables
+│   └── useTokenMints.ts  # Token Mint Address Management (localStorage)
 ├── hooks/               # Custom Hooks
 │   └── useWallet.ts    # Wallet Management Hook
 ├── i18n/                # Internationalization
@@ -69,12 +114,13 @@ src/
 │       ├── zh.ts       # Chinese
 │       └── en.ts       # English
 ├── config/              # Configuration Files
-│   └── rpc.ts          # RPC Endpoint Configuration
+│   ├── rpc.ts          # RPC Endpoint Configuration
+│   └── wallet.ts       # Wallet Configuration
 ├── providers/           # Provider Components
 │   └── WalletProvider.vue
 ├── views/               # Page Views
 │   ├── token/          # Token Related Pages
-│   │   ├── list.vue    # Token List
+│   │   ├── list.vue    # Token List (sorted by creation time)
 │   │   ├── create.vue  # Create Token
 │   │   ├── mint.vue    # Mint Token
 │   │   ├── transfer.vue # Transfer Token
@@ -88,6 +134,7 @@ src/
 │       └── index.vue   # Transaction History Records
 ├── utils/              # Utility Functions
 │   ├── ipfs.ts         # IPFS Upload Utility
+│   ├── metadata.ts     # Metaplex Metadata Operations
 │   ├── token.ts        # Token Operations Utility
 │   └── wallet.ts       # Wallet Utility
 └── App.vue             # Root Component
@@ -95,9 +142,43 @@ src/
 
 ## Development
 
+### Prerequisites
+
+Before starting, ensure you have the required environment:
+
+1. **Install Node.js** (if not already installed):
+   - Visit [Node.js official website](https://nodejs.org/)
+   - Download and install Node.js 18.x or 20.x LTS version
+   - Or use a version manager:
+     ```bash
+     # Using nvm
+     nvm install 18
+     nvm use 18
+     
+     # Using fnm
+     fnm install 18
+     fnm use 18
+     ```
+
+2. **Verify installation**:
+   ```bash
+   node --version  # Should show v18.x.x or v20.x.x
+   npm --version  # Should show 9.x.x or higher
+   ```
+
 ### Install Dependencies
 
 ```bash
+npm install
+```
+
+**Note**: If you encounter dependency installation issues, try:
+```bash
+# Clear npm cache
+npm cache clean --force
+
+# Delete node_modules and package-lock.json, then reinstall
+rm -rf node_modules package-lock.json
 npm install
 ```
 

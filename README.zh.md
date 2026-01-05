@@ -9,26 +9,68 @@
 
 ---
 
+## 环境要求
+
+### 环境配置要求
+
+- **Node.js**: >= 18.0.0 (推荐: 18.x 或 20.x LTS 版本)
+- **npm**: >= 9.0.0 (或 yarn >= 1.22.0)
+- **浏览器**: 支持 ES6+ 的现代浏览器 (Chrome, Firefox, Edge, Safari)
+
+### 推荐工具
+
+- **Node 版本管理器**: 使用 [nvm](https://github.com/nvm-sh/nvm) 或 [fnm](https://github.com/Schniz/fnm) 管理 Node.js 版本
+- **包管理器**: npm (随 Node.js 安装) 或 yarn
+
+### 验证安装
+
+检查您的 Node.js 和 npm 版本：
+
+```bash
+node --version  # 应该 >= 18.0.0
+npm --version   # 应该 >= 9.0.0
+```
+
 ## 功能特性
 
 ### 代币管理
 
 - **代币列表**：查看您的 Solana 代币，包括 SOL 和 SPL 代币，支持实时余额刷新
+  - 按创建时间倒序排列（最新创建的在前）
+  - 保存的 Mint 地址下拉选择
+  - 从代币列表快速转账
 - **创建代币**：创建新的 Solana SPL 代币，可自定义名称、符号、小数位数和权限
+  - 自动保存创建的 Mint 地址到本地存储
 - **铸造代币**：向指定钱包地址铸造代币，支持自动创建关联账户
+  - Mint 地址输入框支持已保存地址下拉选择
+  - 支持下拉选择和手动输入两种方式
 - **转账代币**：转账代币到其他地址，支持自动创建接收者关联账户
+  - Mint 地址输入框支持已保存地址下拉选择
 - **销毁代币**：销毁持有的代币，减少代币总供应量
+  - Mint 地址输入框支持已保存地址下拉选择
 - **冻结管理**：冻结和解冻代币账户，需要冻结权限
+  - Mint 地址输入框支持已保存地址下拉选择
+  - 权限状态显示
 
 ### IPFS 和元数据
 
 - **IPFS 上传**：上传文件和 JSON 元数据到 IPFS（使用 Pinata）
+  - 支持文件上传和 JSON 内容上传
+  - Pinata API 密钥配置
+  - URL 更新和内容替换功能
 - **设置 Metadata**：为代币设置和更新元数据
+  - Mint 地址输入框支持已保存地址下拉选择
+  - 支持创建和更新元数据
+  - 自动保留现有元数据字段（sellerFeeBasisPoints、creators）
 
 ### 交易历史
 
 - **交易记录**：查看钱包的所有交易历史记录
+  - 成功加载时显示具体加载的交易数量
+  - 分页显示，每页 10 条记录
 - **交易详情**：查看每笔交易的详细信息
+  - 指令详情、账户余额变更、交易日志
+  - 完整交易数据显示
 - **统计分析**：显示总交易数、成功/失败交易统计
 
 ### 钱包功能
@@ -59,7 +101,10 @@ src/
 ├── components/          # 公共组件
 │   ├── Header.vue      # 顶部导航栏
 │   ├── Sidebar.vue     # 侧边栏菜单
-│   └── wallet.vue       # 钱包连接组件
+│   ├── wallet.vue      # 钱包连接组件
+│   └── MintAddressInput.vue  # 可复用的 Mint 地址输入组件
+├── composables/         # 组合式函数
+│   └── useTokenMints.ts  # 代币 Mint 地址管理（localStorage）
 ├── hooks/               # 自定义 Hooks
 │   └── useWallet.ts    # 钱包管理 Hook
 ├── i18n/                # 国际化
@@ -68,12 +113,13 @@ src/
 │       ├── zh.ts       # 中文
 │       └── en.ts       # 英文
 ├── config/              # 配置文件
-│   └── rpc.ts          # RPC 端点配置
+│   ├── rpc.ts          # RPC 端点配置
+│   └── wallet.ts       # 钱包配置
 ├── providers/           # 提供者组件
 │   └── WalletProvider.vue
 ├── views/               # 页面视图
 │   ├── token/          # 代币相关页面
-│   │   ├── list.vue    # 代币列表
+│   │   ├── list.vue    # 代币列表（按创建时间排序）
 │   │   ├── create.vue  # 创建代币
 │   │   ├── mint.vue    # 铸造代币
 │   │   ├── transfer.vue # 转账代币
@@ -87,6 +133,7 @@ src/
 │       └── index.vue   # 交易历史记录
 ├── utils/              # 工具函数
 │   ├── ipfs.ts         # IPFS 上传工具
+│   ├── metadata.ts     # Metaplex 元数据操作
 │   ├── token.ts        # 代币操作工具
 │   └── wallet.ts       # 钱包工具
 └── App.vue             # 根组件
@@ -94,9 +141,43 @@ src/
 
 ## 开发
 
+### 前置要求
+
+在开始之前，请确保您已满足所需的环境要求：
+
+1. **安装 Node.js**（如果尚未安装）：
+   - 访问 [Node.js 官方网站](https://nodejs.org/)
+   - 下载并安装 Node.js 18.x 或 20.x LTS 版本
+   - 或使用版本管理器：
+     ```bash
+     # 使用 nvm
+     nvm install 18
+     nvm use 18
+     
+     # 使用 fnm
+     fnm install 18
+     fnm use 18
+     ```
+
+2. **验证安装**：
+   ```bash
+   node --version  # 应该显示 v18.x.x 或 v20.x.x
+   npm --version   # 应该显示 9.x.x 或更高版本
+   ```
+
 ### 安装依赖
 
 ```bash
+npm install
+```
+
+**注意**：如果遇到依赖安装问题，可以尝试：
+```bash
+# 清除 npm 缓存
+npm cache clean --force
+
+# 删除 node_modules 和 package-lock.json，然后重新安装
+rm -rf node_modules package-lock.json
 npm install
 ```
 
