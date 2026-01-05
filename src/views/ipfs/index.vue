@@ -21,6 +21,8 @@ import {
 } from '@ant-design/icons-vue';
 
 // Pinata API 配置
+const authMode = ref<'jwt' | 'apiKey'>('apiKey'); // 默认使用 API Key + Secret（推荐）
+const pinataJwt = ref('');
 const pinataApiKey = ref('');
 const pinataSecretApiKey = ref('');
 const apiKeyValid = ref(false);
@@ -45,34 +47,41 @@ const keepOriginalUrl = ref(true);
 // 组件状态
 const actualNewUrl = ref('');
 
-// 验证Pinata API密钥
+// 验证Pinata API密钥或JWT
 const validateApiKey = async () => {
-  if (!pinataApiKey.value || !pinataSecretApiKey.value) {
-    message.error('请输入Pinata API密钥');
-    apiKeyValid.value = false;
-    return false;
+  if (authMode.value === 'jwt') {
+    if (!pinataJwt.value) {
+      message.error('请输入Pinata JWT');
+      apiKeyValid.value = false;
+      return false;
+    }
+  } else {
+    if (!pinataApiKey.value || !pinataSecretApiKey.value) {
+      message.error('请输入Pinata API密钥和Secret密钥');
+      apiKeyValid.value = false;
+      return false;
+    }
   }
   
   validatingApiKey.value = true;
   
   try {
-    const isValid = await validatePinataCredentials(
-      pinataApiKey.value,
-      pinataSecretApiKey.value
-    );
+    const isValid = authMode.value === 'jwt'
+      ? await validatePinataCredentials(pinataJwt.value)
+      : await validatePinataCredentials(pinataApiKey.value, pinataSecretApiKey.value);
     
     apiKeyValid.value = isValid;
     
     if (isValid) {
-      message.success('Pinata API密钥验证成功');
+      message.success(authMode.value === 'jwt' ? 'Pinata JWT验证成功' : 'Pinata API密钥验证成功');
     } else {
-      message.error('Pinata API密钥无效');
+      message.error(authMode.value === 'jwt' ? 'Pinata JWT无效' : 'Pinata API密钥无效');
     }
     
     return isValid;
   } catch (error) {
-    console.error('验证API密钥时出错:', error);
-    message.error('验证API密钥时出错');
+    console.error('验证凭证时出错:', error);
+    message.error('验证凭证时出错');
     apiKeyValid.value = false;
     return false;
   } finally {
@@ -106,7 +115,7 @@ const editUploadedJson = () => {
 };
 
 // 处理上传模式变更
-watch(uploadMode, (newMode, oldMode) => {
+watch(uploadMode, () => {
   // 如果不是在编辑已上传的JSON，则重置上传状态
   if (!isEditingUploadedJson.value) {
     uploadStatus.value = 'idle';
@@ -150,11 +159,9 @@ const handleFileUpload = async () => {
   
   try {
     const file = fileList.value[0].originFileObj;
-    const result = await uploadFileToIPFS(
-      file,
-      pinataApiKey.value,
-      pinataSecretApiKey.value
-    );
+    const result = authMode.value === 'jwt'
+      ? await uploadFileToIPFS(file, pinataJwt.value)
+      : await uploadFileToIPFS(file, pinataApiKey.value, pinataSecretApiKey.value);
     
     if (result.success && result.url) {
       uploadedUrl.value = result.url;
@@ -219,19 +226,14 @@ const handleJsonUpload = async () => {
     
     // 如果是编辑模式且选择保持原URL，则使用更新功能
     if (isUpdatingContent && originalCID.value) {
-      result = await updateIPFSContent(
-        originalCID.value,
-        jsonData,
-        pinataApiKey.value,
-        pinataSecretApiKey.value
-      );
+      result = authMode.value === 'jwt'
+        ? await updateIPFSContent(originalCID.value, jsonData, pinataJwt.value)
+        : await updateIPFSContent(originalCID.value, jsonData, pinataApiKey.value, pinataSecretApiKey.value);
     } else {
       // 否则使用常规上传
-      result = await uploadJSONToIPFS(
-        jsonData,
-        pinataApiKey.value,
-        pinataSecretApiKey.value
-      );
+      result = authMode.value === 'jwt'
+        ? await uploadJSONToIPFS(jsonData, pinataJwt.value)
+        : await uploadJSONToIPFS(jsonData, pinataApiKey.value, pinataSecretApiKey.value);
     }
     
     if (result.success && result.url) {
@@ -330,12 +332,6 @@ const useNewLink = () => {
   message.success('已切换到新链接');
 };
 
-// 格式化地址
-const formatAddress = (address: string) => {
-  if (!address) return '';
-  return `${address.slice(0, 20)}...${address.slice(-20)}`;
-};
-
 // 组件挂载时的初始化
 onMounted(() => {
   uploadStatus.value = 'idle';
@@ -387,31 +383,68 @@ defineOptions({
           <div class="bg-white/5 rounded-xl p-4 border border-white/10">
             <h3 class="m-0 text-lg font-semibold text-white mb-4">Pinata IPFS配置</h3>
             <div class="space-y-4">
+              <!-- 认证方式选择 -->
               <div>
-                <label class="block text-sm font-medium text-white/90 mb-2">
-                  Pinata API Key <span class="text-red-400">*</span>
-                </label>
-                <a-input
-                  v-model:value="pinataApiKey"
-                  placeholder="输入你的Pinata API Key"
-                  size="large"
-                  class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
-                  :class="{ '!border-solana-green': pinataApiKey }"
-                />
+                <label class="block text-sm font-medium text-white/90 mb-2">认证方式</label>
+                <a-radio-group v-model:value="authMode" button-style="solid" class="w-full">
+                  <a-radio-button value="apiKey" class="flex-1">
+                    API Key + Secret（推荐）
+                  </a-radio-button>
+                  <a-radio-button value="jwt" class="flex-1">
+                    JWT
+                  </a-radio-button>
+                </a-radio-group>
               </div>
               
-              <div>
+              <!-- API Key + Secret 模式 -->
+              <template v-if="authMode === 'apiKey'">
+                <div>
+                  <label class="block text-sm font-medium text-white/90 mb-2">
+                    Pinata API Key <span class="text-red-400">*</span>
+                  </label>
+                  <a-input
+                    v-model:value="pinataApiKey"
+                    placeholder="输入你的Pinata API Key"
+                    size="large"
+                    class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
+                    :class="{ '!border-solana-green': pinataApiKey }"
+                  />
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-white/90 mb-2">
+                    Pinata Secret API Key <span class="text-red-400">*</span>
+                  </label>
+                  <a-input
+                    v-model:value="pinataSecretApiKey"
+                    placeholder="输入你的Pinata Secret API Key"
+                    type="password"
+                    size="large"
+                    class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
+                    :class="{ '!border-solana-green': pinataSecretApiKey }"
+                  />
+                </div>
+                <div class="mt-2 text-xs text-white/60">
+                  在 <a href="https://app.pinata.cloud/" target="_blank" class="text-solana-green hover:underline">Pinata App</a> 的 "API Keys" 页面创建新密钥，获取 API Key 和 Secret Key
+                </div>
+              </template>
+              
+              <!-- JWT 模式 -->
+              <div v-else>
                 <label class="block text-sm font-medium text-white/90 mb-2">
-                  Pinata Secret API Key <span class="text-red-400">*</span>
+                  Pinata JWT <span class="text-red-400">*</span>
                 </label>
                 <a-input
-                  v-model:value="pinataSecretApiKey"
-                  placeholder="输入你的Pinata Secret API Key"
+                  v-model:value="pinataJwt"
+                  placeholder="输入你的Pinata JWT（在Pinata App的API Keys页面创建）"
                   type="password"
                   size="large"
                   class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
-                  :class="{ '!border-solana-green': pinataSecretApiKey }"
+                  :class="{ '!border-solana-green': pinataJwt }"
                 />
+                <div class="mt-2 text-xs text-white/60">
+                  在 <a href="https://app.pinata.cloud/" target="_blank" class="text-solana-green hover:underline">Pinata App</a> 的 "API Keys" 页面创建新密钥，复制 JWT 令牌
+                </div>
               </div>
               
               <div class="flex items-center gap-3">
@@ -423,16 +456,16 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  验证API密钥
+                  验证{{ authMode === 'jwt' ? 'JWT' : 'API密钥' }}
                 </a-button>
                 <div v-if="apiKeyValid" class="flex items-center gap-2 text-green-400">
                   <CheckCircleOutlined />
-                  <span class="text-sm">API密钥已验证</span>
+                  <span class="text-sm">{{ authMode === 'jwt' ? 'JWT' : 'API密钥' }}已验证</span>
                 </div>
               </div>
               
               <div class="text-xs text-white/50">
-                注意: 直接在浏览器中调用Pinata API，API密钥将暴露在前端代码中。生产环境中应使用后端服务处理上传。
+                注意: 直接在浏览器中调用Pinata API，凭证将暴露在前端代码中。生产环境中应使用后端服务处理上传。
               </div>
             </div>
           </div>

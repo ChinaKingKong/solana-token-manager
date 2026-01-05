@@ -1,7 +1,7 @@
-// 模拟IPFS上传功能
-// 在实际应用中，你需要使用真实的IPFS服务，如Pinata、Infura IPFS或自托管IPFS节点
-
 // 实现使用Pinata API上传到IPFS
+// 支持两种认证方式：
+// 1. JWT（推荐，新版本Pinata使用）
+// 2. API Key + Secret（旧版本兼容）
 
 // Pinata API配置
 const PINATA_API_URL = 'https://api.pinata.cloud';
@@ -9,8 +9,8 @@ const PINATA_API_URL = 'https://api.pinata.cloud';
 // 上传文件到IPFS
 export const uploadFileToIPFS = async (
   file: File, 
-  apiKey: string, 
-  secretApiKey: string
+  apiKeyOrJwt: string, 
+  secretApiKey?: string
 ): Promise<{ success: boolean; url?: string; error?: any }> => {
   try {
     // 创建FormData对象
@@ -32,18 +32,27 @@ export const uploadFileToIPFS = async (
     });
     formData.append('pinataOptions', options);
     
+    // 构建请求头：优先使用JWT，如果没有Secret则使用JWT
+    const headers: Record<string, string> = {};
+    if (secretApiKey) {
+      // 使用旧版 API Key + Secret 方式
+      headers['pinata_api_key'] = apiKeyOrJwt;
+      headers['pinata_secret_api_key'] = secretApiKey;
+    } else {
+      // 使用新版 JWT 方式
+      headers['Authorization'] = `Bearer ${apiKeyOrJwt}`;
+    }
+    
     // 发送请求
     const response = await fetch(`${PINATA_API_URL}/pinning/pinFileToIPFS`, {
       method: 'POST',
-      headers: {
-        'pinata_api_key': apiKey,
-        'pinata_secret_api_key': secretApiKey
-      },
+      headers,
       body: formData
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
     
     const result = await response.json();
@@ -64,18 +73,27 @@ export const uploadFileToIPFS = async (
 // 上传JSON数据到IPFS
 export const uploadJSONToIPFS = async (
   data: any,
-  apiKey: string,
-  secretApiKey: string
+  apiKeyOrJwt: string,
+  secretApiKey?: string
 ): Promise<{ success: boolean; url?: string; error?: any }> => {
   try {
+    // 构建请求头：优先使用JWT，如果没有Secret则使用JWT
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (secretApiKey) {
+      // 使用旧版 API Key + Secret 方式
+      headers['pinata_api_key'] = apiKeyOrJwt;
+      headers['pinata_secret_api_key'] = secretApiKey;
+    } else {
+      // 使用新版 JWT 方式
+      headers['Authorization'] = `Bearer ${apiKeyOrJwt}`;
+    }
+    
     // 发送请求
     const response = await fetch(`${PINATA_API_URL}/pinning/pinJSONToIPFS`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'pinata_api_key': apiKey,
-        'pinata_secret_api_key': secretApiKey
-      },
+      headers,
       body: JSON.stringify({
         pinataContent: data,
         pinataMetadata: {
@@ -91,7 +109,8 @@ export const uploadJSONToIPFS = async (
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
     
     const result = await response.json();
@@ -109,18 +128,26 @@ export const uploadJSONToIPFS = async (
   }
 };
 
-// 验证Pinata API密钥
+// 验证Pinata API密钥或JWT
 export const validatePinataCredentials = async (
-  apiKey: string,
-  secretApiKey: string
+  apiKeyOrJwt: string,
+  secretApiKey?: string
 ): Promise<boolean> => {
   try {
+    // 构建请求头
+    const headers: Record<string, string> = {};
+    if (secretApiKey) {
+      // 使用旧版 API Key + Secret 方式
+      headers['pinata_api_key'] = apiKeyOrJwt;
+      headers['pinata_secret_api_key'] = secretApiKey;
+    } else {
+      // 使用新版 JWT 方式
+      headers['Authorization'] = `Bearer ${apiKeyOrJwt}`;
+    }
+    
     const response = await fetch(`${PINATA_API_URL}/data/testAuthentication`, {
       method: 'GET',
-      headers: {
-        'pinata_api_key': apiKey,
-        'pinata_secret_api_key': secretApiKey
-      }
+      headers
     });
     
     if (!response.ok) {
@@ -128,9 +155,10 @@ export const validatePinataCredentials = async (
     }
     
     const data = await response.json();
+    // 两种认证方式都返回相同的成功消息
     return data.message === 'Congratulations! You are communicating with the Pinata API!';
   } catch (error) {
-    console.error('验证Pinata API密钥失败:', error);
+    console.error('验证Pinata凭证失败:', error);
     return false;
   }
 };
@@ -152,21 +180,30 @@ const generateRandomCID = (): string => {
 export const updateIPFSContent = async (
   cid: string,
   data: any,
-  apiKey: string,
-  secretApiKey: string
+  apiKeyOrJwt: string,
+  secretApiKey?: string
 ): Promise<{ success: boolean; url?: string; error?: any; actualUrl?: string; originalCID?: string; newCID?: string }> => {
   try {
     // 在Pinata中，无法直接更新现有CID的内容
     // 我们需要先解析CID，然后上传新内容，并使用相同的文件名
     
+    // 构建请求头
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (secretApiKey) {
+      // 使用旧版 API Key + Secret 方式
+      headers['pinata_api_key'] = apiKeyOrJwt;
+      headers['pinata_secret_api_key'] = secretApiKey;
+    } else {
+      // 使用新版 JWT 方式
+      headers['Authorization'] = `Bearer ${apiKeyOrJwt}`;
+    }
+    
     // 上传新内容
     const response = await fetch(`${PINATA_API_URL}/pinning/pinJSONToIPFS`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'pinata_api_key': apiKey,
-        'pinata_secret_api_key': secretApiKey
-      },
+      headers,
       body: JSON.stringify({
         pinataContent: data,
         pinataMetadata: {
@@ -183,19 +220,25 @@ export const updateIPFSContent = async (
     });
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
     
     const result = await response.json();
     
     // 尝试解除原始CID的固定
     try {
+      const unpinHeaders: Record<string, string> = {};
+      if (secretApiKey) {
+        unpinHeaders['pinata_api_key'] = apiKeyOrJwt;
+        unpinHeaders['pinata_secret_api_key'] = secretApiKey;
+      } else {
+        unpinHeaders['Authorization'] = `Bearer ${apiKeyOrJwt}`;
+      }
+      
       await fetch(`${PINATA_API_URL}/pinning/unpin/${cid}`, {
         method: 'DELETE',
-        headers: {
-          'pinata_api_key': apiKey,
-          'pinata_secret_api_key': secretApiKey
-        }
+        headers: unpinHeaders
       });
     } catch (unpinError) {
       console.warn('解除原始CID固定失败:', unpinError);

@@ -186,11 +186,20 @@ npm run preview
 
 ### Pinata IPFS 配置
 
-IPFS 上传功能使用 Pinata 服务，需要在页面中配置 API 密钥：
+IPFS 上传功能使用 Pinata 服务，需要在页面中配置认证凭证：
 
-- 访问 [Pinata](https://www.pinata.cloud/) 注册账号
-- 在 API Keys 页面创建新的 API Key
-- 在"IPFS上传"页面输入 API Key 和 Secret Key
+**推荐方式：使用 API Key + Secret**
+- 访问 [Pinata App](https://app.pinata.cloud/) 注册/登录账号
+- 在侧边栏选择 "API Keys"，点击右上角 "New Key"
+- 建议选择 Admin 权限和无限使用次数
+- 复制生成的 **API Key** 和 **Secret API Key**
+- 在"IPFS上传"页面选择 "API Key + Secret（推荐）" 模式，输入 API Key 和 Secret Key
+
+**备选方式：使用 JWT**
+- 如果您的 Pinata 账号使用新版 JWT 认证，可以选择 "JWT" 模式
+- 在"IPFS上传"页面输入 JWT 令牌
+
+参考文档：[Pinata Quickstart](https://docs.pinata.cloud/quickstart)
 
 ## 注意事项
 
