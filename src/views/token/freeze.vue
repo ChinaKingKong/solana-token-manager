@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { message, Modal } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import {
   getMint,
@@ -22,6 +23,8 @@ import {
   WarningOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+
+const { t } = useI18n();
 
 // 使用钱包Hook
 const walletContext = useWallet();
@@ -109,12 +112,12 @@ const fetchTokenInfo = async () => {
     // 检查是否有冻结权限
     if (!mintInfo.freezeAuthority) {
       hasFreezeAuthority.value = false;
-      message.warning('该代币没有设置冻结权限');
+      message.warning(t('freezeManage.freezeFailed'));
     } else if (walletState.value?.publicKey) {
       const isAuthority = mintInfo.freezeAuthority.toString() === walletState.value.publicKey.toString();
       hasFreezeAuthority.value = isAuthority;
       if (!isAuthority) {
-        message.warning('您不是该代币的冻结权限持有者');
+        message.warning(t('freezeManage.permissionDenied') || t('setMetadata.permissionDenied'));
       }
     } else {
       hasFreezeAuthority.value = false;
@@ -125,7 +128,7 @@ const fetchTokenInfo = async () => {
       await fetchAccountInfo();
     }
   } catch (error: any) {
-    message.error(`获取代币信息失败: ${error.message || '请检查Mint地址'}`);
+    message.error(`${t('freezeManage.freezeFailed')}: ${error.message || t('freezeManage.mintAddressRequired')}`);
     console.error('获取代币信息失败:', error);
     tokenInfo.value = null;
     hasFreezeAuthority.value = false;
@@ -141,7 +144,7 @@ const fetchAccountInfo = async () => {
   }
 
   if (!isValidSolanaAddress(targetAccountAddress.value)) {
-    message.error('账户地址格式不正确');
+    message.error(t('freezeManage.addressInvalid'));
     return;
   }
 
@@ -152,7 +155,7 @@ const fetchAccountInfo = async () => {
 
     // 验证账户是否属于该代币
     if (accountData.mint.toString() !== tokenMintAddress.value) {
-      message.error('该账户不属于指定的代币');
+      message.error(t('freezeManage.freezeFailed'));
       accountInfo.value = null;
       return;
     }
@@ -171,9 +174,9 @@ const fetchAccountInfo = async () => {
     operationType.value = accountData.isFrozen ? 'thaw' : 'freeze';
   } catch (error: any) {
     if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
-      message.error('账户不存在或地址无效');
+      message.error(t('freezeManage.freezeFailed'));
     } else {
-      message.error(`获取账户信息失败: ${error.message || '未知错误'}`);
+      message.error(`${t('common.error')}: ${error.message || t('common.error')}`);
     }
     console.error('获取账户信息失败:', error);
     accountInfo.value = null;
@@ -186,28 +189,28 @@ const fetchAccountInfo = async () => {
 // 执行冻结或解冻操作
 const handleOperation = async () => {
   if (!isFormValid.value) {
-    message.error('请检查表单信息是否正确');
+    message.error(t('freezeManage.accountAddressRequired'));
     return;
   }
 
   if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   if (!hasFreezeAuthority.value) {
-    message.error('您没有该代币的冻结权限');
+    message.error(t('freezeManage.permissionDenied') || t('setMetadata.permissionDenied'));
     return;
   }
 
   // 二次确认
-  const actionText = operationType.value === 'freeze' ? '冻结' : '解冻';
+  const actionText = operationType.value === 'freeze' ? t('freezeManage.freeze') : t('freezeManage.thaw');
   Modal.confirm({
-    title: `确认${actionText}账户`,
-    content: `您确定要${actionText}该代币账户吗？${operationType.value === 'freeze' ? '冻结后，该账户的代币将无法转账。' : '解冻后，该账户将恢复正常交易功能。'}`,
-    okText: `确认${actionText}`,
+    title: `${t('common.confirm')}${actionText}${t('freezeManage.accountAddress')}`,
+    content: `${t('common.confirm')}${actionText}${t('freezeManage.accountAddress')}？`,
+    okText: `${t('common.confirm')}${actionText}`,
     okType: operationType.value === 'freeze' ? 'danger' : 'primary',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     onOk: async () => {
       await executeOperation();
     }
@@ -217,12 +220,12 @@ const handleOperation = async () => {
 // 执行操作
 const executeOperation = async () => {
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   if (!walletState.value?.wallet) {
-    message.error('钱包未连接');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
@@ -231,12 +234,12 @@ const executeOperation = async () => {
   try {
     // 再次检查钱包状态（防止在操作过程中断开连接）
     if (!walletState.value?.connected || !walletState.value?.publicKey) {
-      message.error('钱包未连接，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
     if (!walletState.value?.wallet) {
-      message.error('钱包适配器未初始化，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
@@ -248,19 +251,19 @@ const executeOperation = async () => {
 
     // 验证钱包适配器是否有效
     if (!wallet || typeof wallet.sendTransaction !== 'function') {
-      message.error('钱包适配器无效，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
     // 检查钱包适配器的连接状态
     if (wallet.connected === false || !wallet.publicKey) {
-      message.error('钱包未连接，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
     // 验证冻结权限
     if (!hasFreezeAuthority.value) {
-      message.error('您没有该代币的冻结权限');
+      message.error(t('freezeManage.permissionDenied') || t('setMetadata.permissionDenied'));
       return;
     }
 
@@ -270,19 +273,19 @@ const executeOperation = async () => {
       
       // 验证账户是否属于该代币
       if (accountData.mint.toString() !== mintPubkey.toString()) {
-        throw new Error('账户不属于指定的代币');
+        throw new Error(t('freezeManage.freezeFailed'));
       }
 
       // 验证当前状态是否与操作匹配
       if (operationType.value === 'freeze' && accountData.isFrozen) {
-        throw new Error('账户已经被冻结');
+        throw new Error(t('freezeManage.alreadyFrozen'));
       }
       if (operationType.value === 'thaw' && !accountData.isFrozen) {
-        throw new Error('账户未被冻结，无需解冻');
+        throw new Error(t('freezeManage.notFrozen'));
       }
     } catch (error: any) {
       if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
-        throw new Error('账户不存在或无效');
+        throw new Error(t('freezeManage.freezeFailed'));
       }
       throw error;
     }
@@ -358,8 +361,8 @@ const executeOperation = async () => {
     lastOperationType.value = operationType.value;
     operationSuccess.value = true;
 
-    const actionText = operationType.value === 'freeze' ? '冻结' : '解冻';
-    message.success(`成功${actionText}账户！`);
+    const actionText = operationType.value === 'freeze' ? t('freezeManage.freeze') : t('freezeManage.thaw');
+    message.success(operationType.value === 'freeze' ? t('freezeManage.freezeSuccess') : t('freezeManage.thawSuccess'));
 
     // 刷新账户信息
     await fetchAccountInfo();
@@ -368,27 +371,23 @@ const executeOperation = async () => {
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
-      message.warning('您已取消交易');
+      message.warning(t('freezeManage.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
-      message.error('钱包未连接，请重新连接钱包后重试');
+      message.error(t('wallet.connectWallet'));
     } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
-      message.error('余额不足，无法支付交易费用');
+      message.error(t('freezeManage.insufficientFunds'));
     } else if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
-      message.error('账户不存在或无效');
-    } else if (error.message?.includes('已经被冻结')) {
-      message.warning('账户已经被冻结，无需重复操作');
-    } else if (error.message?.includes('未被冻结') || error.message?.includes('无需解冻')) {
-      message.warning('账户未被冻结，无需解冻');
-    } else if (error.message?.includes('不属于指定的代币')) {
-      message.error('账户不属于指定的代币');
+      message.error(t('freezeManage.freezeFailed'));
+    } else if (error.message?.includes('已经被冻结') || error.message?.includes(t('freezeManage.alreadyFrozen'))) {
+      message.warning(t('freezeManage.alreadyFrozen'));
+    } else if (error.message?.includes('未被冻结') || error.message?.includes('无需解冻') || error.message?.includes(t('freezeManage.notFrozen'))) {
+      message.warning(t('freezeManage.notFrozen'));
     } else if (error.name === 'WalletSendTransactionError' || error.message?.includes('Unexpected error')) {
-      // 提供更详细的错误信息
-      const errorDetails = error.logs ? `\n错误日志: ${JSON.stringify(error.logs)}` : '';
-      message.error(`交易发送失败，可能的原因：\n1. 网络连接问题\n2. 钱包状态异常\n3. 账户权限不足\n4. 交易参数错误\n请检查后重试。${errorDetails}`);
+      message.error(t('freezeManage.freezeFailed'));
     } else {
-      const actionText = operationType.value === 'freeze' ? '冻结' : '解冻';
-      const errorMsg = error.message || error.toString() || '未知错误';
-      message.error(`${actionText}操作失败: ${errorMsg}`);
+      const actionText = operationType.value === 'freeze' ? t('freezeManage.freeze') : t('freezeManage.thaw');
+      const errorMsg = error.message || error.toString() || t('common.error');
+      message.error(`${actionText}${t('common.error')}: ${errorMsg}`);
     }
   } finally {
     processing.value = false;
@@ -399,10 +398,10 @@ const executeOperation = async () => {
 const copyAddress = (address: string) => {
   navigator.clipboard.writeText(address)
     .then(() => {
-      message.success('地址已复制到剪贴板');
+      message.success(t('wallet.addressCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('common.error'));
     });
 };
 

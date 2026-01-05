@@ -20,6 +20,7 @@
     "@solana/web3.js": "^1.91.1",
     "ant-design-vue": "^4.2.6",
     "vue": "^3.4.21",
+    "vue-i18n": "^9.8.0",
     "vue-router": "^4.5.1"
   },
   "devDependencies": {

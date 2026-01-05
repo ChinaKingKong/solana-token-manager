@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   HomeOutlined,
   PlusOutlined,
@@ -13,60 +15,70 @@ import {
   ToolOutlined,
 } from '@ant-design/icons-vue';
 
+const { t } = useI18n();
+
 // 定义菜单项
 interface MenuItem {
   key: string;
-  label: string;
+  labelKey: string;
   icon: any;
 }
 
-const menuItems: MenuItem[] = [
+const menuItemsConfig: MenuItem[] = [
   {
     key: 'token-list',
-    label: '代币列表',
+    labelKey: 'header.tokenList',
     icon: HomeOutlined,
   },
   {
     key: 'create-token',
-    label: '创建代币',
+    labelKey: 'header.createToken',
     icon: PlusOutlined,
   },
   {
     key: 'mint-token',
-    label: '铸造代币',
+    labelKey: 'header.mintToken',
     icon: ToolOutlined,
   },
   {
     key: 'transfer-token',
-    label: '转账代币',
+    labelKey: 'header.transferToken',
     icon: SendOutlined,
   },
   {
     key: 'burn-token',
-    label: '销毁代币',
+    labelKey: 'header.burnToken',
     icon: FireOutlined,
   },
   {
     key: 'freeze-manage',
-    label: '冻结管理',
+    labelKey: 'header.freezeManage',
     icon: LockOutlined,
   },
   {
     key: 'ipfs-upload',
-    label: 'IPFS上传',
+    labelKey: 'header.ipfsUpload',
     icon: UploadOutlined,
   },
   {
     key: 'set-metadata',
-    label: '设置Metadata',
+    labelKey: 'header.setMetadata',
     icon: FileTextOutlined,
   },
   {
     key: 'transaction-history',
-    label: '交易历史',
+    labelKey: 'header.transactionHistory',
     icon: HistoryOutlined,
   },
 ];
+
+// 计算菜单项（使用国际化）
+const menuItems = computed(() => {
+  return menuItemsConfig.map(item => ({
+    ...item,
+    label: t(item.labelKey),
+  }));
+});
 
 // 接收外部传入的 activeKey
 const props = defineProps<{

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { message, Modal } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import {
   getMint,
@@ -19,6 +20,8 @@ import {
   ExclamationCircleOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+
+const { t } = useI18n();
 
 // 使用钱包Hook
 const walletContext = useWallet();
@@ -137,22 +140,22 @@ const fetchCurrentBalance = async () => {
 // 销毁代币
 const handleBurn = async () => {
   if (!isFormValid.value) {
-    message.error('请检查表单信息是否正确');
+    message.error(t('burnToken.amountRequired'));
     return;
   }
 
   if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   // 二次确认
   Modal.confirm({
-    title: '确认销毁代币',
-    content: `您确定要销毁 ${burnAmount.value} 个代币吗？此操作不可逆！`,
-    okText: '确认销毁',
+    title: t('burnToken.confirmBurn'),
+    content: t('burnToken.confirmBurnMessage', { amount: burnAmount.value }),
+    okText: t('burnToken.confirmBurn'),
     okType: 'danger',
-    cancelText: '取消',
+    cancelText: t('common.cancel'),
     onOk: async () => {
       await executeBurn();
     }
@@ -162,7 +165,7 @@ const handleBurn = async () => {
 // 执行销毁操作
 const executeBurn = async () => {
   if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
-    message.error('钱包未连接，请重新连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
@@ -184,7 +187,7 @@ const executeBurn = async () => {
     try {
       await getAccount(conn, ataAddress);
     } catch (error: any) {
-      message.error('代币账户不存在，无法销毁');
+      message.error(t('burnToken.burnFailed'));
       return;
     }
 
@@ -213,7 +216,7 @@ const executeBurn = async () => {
 
     burnTransactionSignature.value = signature;
     burnSuccess.value = true;
-    message.success(`成功销毁 ${burnAmount.value} 个代币！`);
+    message.success(t('burnToken.burnSuccess'));
 
     // 刷新余额和代币信息
     await fetchCurrentBalance();
@@ -226,13 +229,13 @@ const executeBurn = async () => {
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
-      message.warning('您已取消交易');
+      message.warning(t('burnToken.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
-      message.error('钱包未连接，请重新连接钱包后重试');
+      message.error(t('wallet.connectWallet'));
     } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
-      message.error('余额不足，无法完成销毁');
+      message.error(t('burnToken.insufficientBalance'));
     } else {
-      message.error(`销毁代币失败: ${error.message || '未知错误'}`);
+      message.error(`${t('burnToken.burnFailed')}: ${error.message || t('common.error')}`);
     }
   } finally {
     burning.value = false;
@@ -250,10 +253,10 @@ const setMaxAmount = () => {
 const copyAddress = (address: string) => {
   navigator.clipboard.writeText(address)
     .then(() => {
-      message.success('地址已复制到剪贴板');
+      message.success(t('wallet.addressCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('common.error'));
     });
 };
 

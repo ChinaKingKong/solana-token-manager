@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import { useWallet } from '../../hooks/useWallet';
 import { uploadJSONToIPFS, validatePinataCredentials } from '../../utils/ipfs';
 import { getMetadataPDA, createUpdateMetadataAccountV2Instruction, createCreateMetadataAccountV3Instruction, TOKEN_METADATA_PROGRAM_ID } from '../../utils/metadata';
 import { getMint } from '@solana/spl-token';
+
+const { t } = useI18n();
 import {
   FileTextOutlined,
   CopyOutlined,
@@ -76,14 +79,14 @@ const validateApiKey = async () => {
     apiKeyValid.value = isValid;
     
     if (isValid) {
-      message.success('Pinata API密钥验证成功');
+      message.success(t('ipfsUpload.validateSuccess'));
     } else {
-      message.error('Pinata API密钥无效');
+      message.error(t('ipfsUpload.validateFailed'));
     }
     
     return isValid;
   } catch (error) {
-    message.error('验证API密钥时出错');
+    message.error(t('ipfsUpload.validateFailed'));
     apiKeyValid.value = false;
     return false;
   } finally {
@@ -94,12 +97,12 @@ const validateApiKey = async () => {
 // 上传元数据到IPFS
 const uploadMetadataToIPFS = async () => {
   if (!pinataApiKey.value || !pinataSecretApiKey.value) {
-    message.error('请输入Pinata API密钥');
+    message.error(t('ipfsUpload.apiKeyRequired'));
     return;
   }
   
   if (!tokenName.value || !tokenSymbol.value) {
-    message.error('代币名称和符号不能为空');
+    message.error(t('setMetadata.tokenNameRequired'));
     return;
   }
   
@@ -134,12 +137,12 @@ const uploadMetadataToIPFS = async () => {
     
     if (result.success && result.url) {
       metadataUrl.value = result.url;
-      message.success('元数据已成功上传到IPFS');
+      message.success(t('ipfsUpload.uploadSuccess'));
     } else {
-      message.error('上传元数据失败');
+      message.error(t('ipfsUpload.uploadFailed'));
     }
   } catch (error) {
-    message.error('上传元数据失败');
+    message.error(t('ipfsUpload.uploadFailed'));
   } finally {
     uploadingMetadata.value = false;
   }
@@ -149,44 +152,44 @@ const uploadMetadataToIPFS = async () => {
 const submitMetadata = async () => {
   // 验证 Mint 地址
   if (!tokenMintAddress.value || tokenMintAddress.value.trim() === '') {
-    message.error('请输入代币Mint地址');
+    message.error(t('setMetadata.mintAddressRequired'));
     return;
   }
 
   if (!isValidSolanaAddress(tokenMintAddress.value)) {
-    message.error('请输入有效的代币Mint地址');
+    message.error(t('setMetadata.mintAddressRequired'));
     return;
   }
 
   // 验证代币信息
   if (!tokenName.value || tokenName.value.trim() === '') {
-    message.error('代币名称不能为空');
+    message.error(t('setMetadata.tokenNameRequired'));
     return;
   }
 
   if (!tokenSymbol.value || tokenSymbol.value.trim() === '') {
-    message.error('代币符号不能为空');
+    message.error(t('setMetadata.tokenSymbolRequired'));
     return;
   }
 
   // 验证元数据 URL
   if (!metadataUrl.value || metadataUrl.value.trim() === '') {
     if (metadataSourceMode.value === 'upload') {
-      message.error('请先上传元数据到IPFS或提供元数据URL');
+      message.error(t('setMetadata.metadataUrlRequired'));
     } else {
-      message.error('请输入元数据URL');
+      message.error(t('setMetadata.metadataUrlRequired'));
     }
     return;
   }
 
   // 验证钱包连接
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   if (!walletState.value?.wallet) {
-    message.error('钱包未连接');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
@@ -198,7 +201,7 @@ const submitMetadata = async () => {
     try {
       mintPubkey = new PublicKey(tokenMintAddress.value.trim());
     } catch (error) {
-      message.error('代币Mint地址格式无效');
+      message.error(t('setMetadata.mintAddressRequired'));
       return;
     }
 
@@ -208,12 +211,12 @@ const submitMetadata = async () => {
 
     // 验证钱包适配器
     if (!wallet || typeof wallet.sendTransaction !== 'function') {
-      message.error('钱包适配器无效，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
     if (wallet.connected === false || !wallet.publicKey) {
-      message.error('钱包未连接，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
@@ -224,7 +227,7 @@ const submitMetadata = async () => {
       mintInfo = await getMint(conn, mintPubkey);
       actualMintAuthority = mintInfo.mintAuthority;
     } catch (error) {
-      message.error('代币不存在或地址无效');
+      message.error(t('setMetadata.accountNotFound'));
       return;
     }
 
@@ -237,15 +240,15 @@ const submitMetadata = async () => {
     const uriBytes = Buffer.from(metadataUrl.value.trim(), 'utf8').length;
 
     if (nameBytes > 32) {
-      message.error(`代币名称过长 (${nameBytes}/32 字节)，请缩短名称`);
+      message.error(t('setMetadata.nameTooLong'));
       return;
     }
     if (symbolBytes > 10) {
-      message.error(`代币符号过长 (${symbolBytes}/10 字节)，请缩短符号`);
+      message.error(t('setMetadata.symbolTooLong'));
       return;
     }
     if (uriBytes > 200) {
-      message.error(`元数据 URI 过长 (${uriBytes}/200 字节)，请使用短链接`);
+      message.error(t('setMetadata.uriTooLong'));
       return;
     }
 
@@ -281,13 +284,13 @@ const submitMetadata = async () => {
       // 如果元数据账户不存在，使用创建指令
       // 创建元数据需要 mint authority
       if (!actualMintAuthority) {
-        message.error('代币的 mint authority 已被撤销，无法创建元数据');
+        message.error(t('setMetadata.permissionDenied'));
         return;
       }
 
       // 验证当前钱包是否是 mint authority
       if (!actualMintAuthority.equals(updateAuthority)) {
-        message.error(`权限不足。当前钱包不是代币的 mint authority。Mint authority: ${actualMintAuthority.toString()}`);
+        message.error(t('setMetadata.permissionDenied'));
         return;
       }
 
@@ -334,31 +337,31 @@ const submitMetadata = async () => {
     await conn.confirmTransaction(signature, 'confirmed');
 
     metadataSuccess.value = true;
-    message.success('元数据设置成功!');
+    message.success(t('setMetadata.setSuccess'));
   } catch (error: any) {
     // 处理特定错误
     if (error.message?.includes('User rejected') || error.message?.includes('用户取消')) {
-      message.warning('您已取消交易');
+      message.warning(t('setMetadata.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('Insufficient funds') || error.message?.includes('insufficient funds')) {
-      message.error('余额不足，请确保账户有足够的 SOL 支付交易费用');
+      message.error(t('setMetadata.insufficientFunds'));
     } else if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
-      message.error('元数据账户不存在或格式错误。如果代币已创建，请确保您有权限设置元数据');
+      message.error(t('setMetadata.accountNotFound'));
     } else if (error.message?.includes('0x1') || error.message?.includes('ConstraintRaw') || error.message?.includes('constraint')) {
-      message.error('权限不足。请确保您的钱包是代币的 mint authority 或 update authority');
+      message.error(t('setMetadata.permissionDenied'));
     } else if (error.message?.includes('0x0') || error.message?.includes('Insufficient')) {
-      message.error('账户余额不足或权限不足');
+      message.error(t('setMetadata.insufficientFunds'));
     } else if (error.message?.includes('交易模拟失败')) {
       message.error(error.message);
     } else if (error.logs && Array.isArray(error.logs)) {
       // 尝试从日志中提取错误信息
       const errorLog = error.logs.find((log: string) => log.includes('Error') || log.includes('error'));
       if (errorLog) {
-        message.error(`设置元数据失败: ${errorLog}`);
+        message.error(`${t('setMetadata.setFailed')}: ${errorLog}`);
       } else {
-        message.error(`设置元数据失败: ${error.message || '未知错误'}`);
+        message.error(`${t('setMetadata.setFailed')}: ${error.message || t('common.error')}`);
       }
     } else {
-      const errorMsg = error.message || '未知错误';
+      const errorMsg = error.message || t('common.error');
       message.error(`设置元数据失败: ${errorMsg}`);
     }
   } finally {
@@ -370,10 +373,10 @@ const submitMetadata = async () => {
 const copyUrl = (url: string) => {
   navigator.clipboard.writeText(url)
     .then(() => {
-      message.success('已复制到剪贴板');
+      message.success(t('wallet.addressCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('common.error'));
     });
 };
 
@@ -434,8 +437,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
-        <p class="text-white/60">连接钱包后即可设置代币元数据</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('wallet.connectWallet') }}</h3>
+        <p class="text-white/60">{{ t('setMetadata.title') }}</p>
       </div>
     </div>
 
@@ -450,8 +453,8 @@ defineOptions({
           <div class="flex items-center gap-3 mb-6">
             <CheckCircleOutlined class="text-3xl text-[#52c41a]" />
             <div>
-              <h3 class="m-0 text-xl font-semibold text-white">元数据设置成功！</h3>
-              <p class="m-0 text-sm text-white/60 mt-1">您的代币元数据已成功设置</p>
+              <h3 class="m-0 text-xl font-semibold text-white">{{ t('setMetadata.setSuccess') }}</h3>
+              <p class="m-0 text-sm text-white/60 mt-1">{{ t('setMetadata.setSuccess') }}</p>
             </div>
           </div>
 
@@ -459,7 +462,7 @@ defineOptions({
             <!-- Mint 地址 -->
             <div v-if="tokenMintAddress" class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-3">
-                <h3 class="m-0 text-base font-semibold text-white">Mint 地址</h3>
+                <h3 class="m-0 text-base font-semibold text-white">{{ t('setMetadata.successMintAddress') }}</h3>
                 <a-button
                   @click="viewOnSolscan(tokenMintAddress)"
                   type="text"
@@ -467,7 +470,7 @@ defineOptions({
                   <template #icon>
                     <GlobalOutlined />
                   </template>
-                  Solscan
+                  {{ t('setMetadata.viewOnSolscan') }}
                 </a-button>
               </div>
               <div class="flex items-center gap-2 bg-white/5 rounded-xl p-3 border border-white/10">
@@ -480,7 +483,7 @@ defineOptions({
                   <template #icon>
                     <CopyOutlined />
                   </template>
-                  复制
+                  {{ t('common.copy') }}
                 </a-button>
               </div>
             </div>
@@ -488,7 +491,7 @@ defineOptions({
             <!-- 元数据URL -->
             <div v-if="metadataUrl" class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center gap-2 mb-3">
-                <span class="text-base font-semibold text-white">元数据URL</span>
+                <span class="text-base font-semibold text-white">{{ t('setMetadata.successMetadataUrl') }}</span>
               </div>
               <div class="flex items-center gap-2 bg-white/5 rounded-xl p-3 border border-white/10">
                 <code class="text-sm text-white/90 font-mono break-all flex-1 min-w-0">{{ metadataUrl }}</code>
@@ -500,7 +503,7 @@ defineOptions({
                   <template #icon>
                     <CopyOutlined />
                   </template>
-                  复制
+                  {{ t('common.copy') }}
                 </a-button>
               </div>
             </div>
@@ -512,7 +515,7 @@ defineOptions({
                 <template #icon>
                   <FileTextOutlined />
                 </template>
-                继续设置
+                {{ t('setMetadata.continue') }}
               </a-button>
             </div>
           </div>
@@ -530,7 +533,7 @@ defineOptions({
         <div class="relative z-[1] space-y-6">
           <!-- 标题和说明 -->
           <div>
-            <h2 class="m-0 text-2xl font-semibold text-white mb-2">设置代币Metadata</h2>
+            <h2 class="m-0 text-2xl font-semibold text-white mb-2">{{ t('setMetadata.title') }}</h2>
             <div class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
               <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
               <div class="flex-1">
@@ -549,18 +552,18 @@ defineOptions({
           <!-- 代币Mint地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              代币Mint地址 <span class="text-red-400">*</span>
+              {{ t('setMetadata.mintAddress') }} <span class="text-red-400">*</span>
             </label>
             <a-input
               v-model:value="tokenMintAddress"
-              placeholder="请输入代币的Mint地址"
+              :placeholder="t('setMetadata.mintAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': tokenMintAddress && isValidSolanaAddress(tokenMintAddress) }"
             />
-            <div class="mt-1.5 text-xs text-white/50">输入要设置元数据的代币Mint地址</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('setMetadata.mintAddress') }}</div>
             <div v-if="tokenMintAddress && !isValidSolanaAddress(tokenMintAddress)" class="mt-1.5 text-xs text-red-400">
-              地址格式不正确
+              {{ t('setMetadata.addressInvalid') }}
             </div>
           </div>
 
@@ -568,11 +571,11 @@ defineOptions({
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-white/90 mb-2">
-                代币名称 <span class="text-red-400">*</span>
+                {{ t('setMetadata.tokenName') }} <span class="text-red-400">*</span>
               </label>
               <a-input
                 v-model:value="tokenName"
-                placeholder="例如: My Token"
+                :placeholder="t('setMetadata.tokenNamePlaceholder')"
                 size="large"
                 class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
                 :class="{ '!border-solana-green': tokenName }"
@@ -580,11 +583,11 @@ defineOptions({
             </div>
             <div>
               <label class="block text-sm font-medium text-white/90 mb-2">
-                代币符号 <span class="text-red-400">*</span>
+                {{ t('setMetadata.tokenSymbol') }} <span class="text-red-400">*</span>
               </label>
               <a-input
                 v-model:value="tokenSymbol"
-                placeholder="例如: MTK"
+                :placeholder="t('setMetadata.tokenSymbolPlaceholder')"
                 size="large"
                 class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl uppercase"
                 :class="{ '!border-solana-green': tokenSymbol }"
@@ -595,11 +598,11 @@ defineOptions({
 
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              代币描述
+              {{ t('setMetadata.tokenDescription') }}
             </label>
             <a-textarea
               v-model:value="tokenDescription"
-              placeholder="输入代币的描述信息"
+              :placeholder="t('setMetadata.tokenDescriptionPlaceholder')"
               :rows="3"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
               :class="{ '!border-solana-green': tokenDescription }"
@@ -608,33 +611,33 @@ defineOptions({
 
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              代币图片URL
+              {{ t('setMetadata.tokenImage') }}
             </label>
             <a-input
               v-model:value="tokenImage"
-              placeholder="例如: https://ipfs.io/ipfs/..."
+              :placeholder="t('setMetadata.tokenImagePlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
               :class="{ '!border-solana-green': tokenImage }"
             />
-            <div class="mt-1.5 text-xs text-white/50">代币图片的IPFS链接或URL</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('setMetadata.tokenImage') }}</div>
           </div>
 
           <!-- 元数据来源选择 -->
           <div>
-            <label class="block text-sm font-medium text-white/90 mb-2">元数据来源</label>
+            <label class="block text-sm font-medium text-white/90 mb-2">{{ t('setMetadata.metadataSource') }}</label>
             <a-radio-group v-model:value="metadataSourceMode" button-style="solid" class="w-full">
               <a-radio-button value="upload" class="flex-1">
                 <template #icon>
                   <UploadOutlined />
                 </template>
-                上传新文件
+                {{ t('setMetadata.uploadNew') }}
               </a-radio-button>
               <a-radio-button value="existing" class="flex-1">
                 <template #icon>
                   <GlobalOutlined />
                 </template>
-                使用已有链接
+                {{ t('setMetadata.useExisting') }}
               </a-radio-button>
             </a-radio-group>
           </div>

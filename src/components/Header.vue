@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import Wallet from './wallet.vue';
 import { useWallet } from '../hooks/useWallet';
 import type { NetworkType } from '../config/rpc';
@@ -16,12 +17,13 @@ import {
   ToolOutlined,
   RightOutlined,
   GlobalOutlined,
+  TranslationOutlined,
 } from '@ant-design/icons-vue';
 
 // 定义菜单项配置
 interface PageConfig {
   key: string;
-  title: string;
+  titleKey: string;
   icon: any;
 }
 
@@ -30,38 +32,43 @@ const props = defineProps<{
   sidebarCollapsed?: boolean;
 }>();
 
+const { t, locale } = useI18n();
+
 // 页面配置映射
 const pageConfigs: PageConfig[] = [
-  { key: 'token-list', title: '代币列表', icon: HomeOutlined },
-  { key: 'create-token', title: '创建代币', icon: PlusOutlined },
-  { key: 'mint-token', title: '铸造代币', icon: ToolOutlined },
-  { key: 'transfer-token', title: '转账代币', icon: SendOutlined },
-  { key: 'burn-token', title: '销毁代币', icon: FireOutlined },
-  { key: 'freeze-manage', title: '冻结管理', icon: LockOutlined },
-  { key: 'ipfs-upload', title: 'IPFS上传', icon: UploadOutlined },
-  { key: 'set-metadata', title: '设置Metadata', icon: FileTextOutlined },
-  { key: 'transaction-history', title: '交易历史', icon: HistoryOutlined },
+  { key: 'token-list', titleKey: 'header.tokenList', icon: HomeOutlined },
+  { key: 'create-token', titleKey: 'header.createToken', icon: PlusOutlined },
+  { key: 'mint-token', titleKey: 'header.mintToken', icon: ToolOutlined },
+  { key: 'transfer-token', titleKey: 'header.transferToken', icon: SendOutlined },
+  { key: 'burn-token', titleKey: 'header.burnToken', icon: FireOutlined },
+  { key: 'freeze-manage', titleKey: 'header.freezeManage', icon: LockOutlined },
+  { key: 'ipfs-upload', titleKey: 'header.ipfsUpload', icon: UploadOutlined },
+  { key: 'set-metadata', titleKey: 'header.setMetadata', icon: FileTextOutlined },
+  { key: 'transaction-history', titleKey: 'header.transactionHistory', icon: HistoryOutlined },
 ];
 
 // 当前页面配置
 const currentPage = computed(() => {
   const page = pageConfigs.find(page => page.key === props.activeKey) || pageConfigs[0];
-  return page;
+  return {
+    ...page,
+    title: t(page.titleKey),
+  };
 });
 
 // 钱包上下文
 const { network, switchNetwork } = useWallet();
 
 // 网络选项
-const networkOptions = [
-  { label: '主网', value: 'mainnet' as NetworkType },
-  { label: '测试网', value: 'devnet' as NetworkType },
-];
+const networkOptions = computed(() => [
+  { label: t('header.mainnet'), value: 'mainnet' as NetworkType },
+  { label: t('header.devnet'), value: 'devnet' as NetworkType },
+]);
 
 // 当前网络显示文本
 const currentNetworkLabel = computed(() => {
   const currentNetwork = network.value;
-  return networkOptions.find(opt => opt.value === currentNetwork)?.label || '主网';
+  return networkOptions.value.find(opt => opt.value === currentNetwork)?.label || t('header.mainnet');
 });
 
 // 切换网络
@@ -70,10 +77,30 @@ const handleNetworkChange = (newNetwork: NetworkType) => {
   
   try {
     switchNetwork(newNetwork);
-    message.success(`已切换到${networkOptions.find(opt => opt.value === newNetwork)?.label}`);
+    const networkLabel = networkOptions.value.find(opt => opt.value === newNetwork)?.label;
+    message.success(`${t('header.networkSwitched')}${networkLabel}`);
   } catch (error) {
-    message.error('切换网络失败');
+    message.error(t('header.networkSwitchFailed'));
   }
+};
+
+// 语言选项
+const languageOptions = [
+  { label: '中文', value: 'zh', flag: '🇨🇳' },
+  { label: 'English', value: 'en', flag: '🇺🇸' },
+];
+
+// 当前语言
+const currentLanguage = computed(() => {
+  return languageOptions.find(opt => opt.value === locale.value) || languageOptions[0];
+});
+
+// 切换语言
+const handleLanguageChange = (newLocale: string) => {
+  if (locale.value === newLocale) return;
+  locale.value = newLocale;
+  localStorage.setItem('locale', newLocale);
+  message.success(newLocale === 'zh' ? '已切换到中文' : 'Switched to English');
 };
 </script>
 
@@ -92,6 +119,24 @@ const handleNetworkChange = (newNetwork: NetworkType) => {
 
         <!-- 右侧钱包区域 -->
         <div class="header-right">
+          <!-- 语言切换按钮 -->
+          <a-dropdown trigger="click" placement="bottomRight">
+            <a-button class="language-switch-btn">
+              <template #icon><TranslationOutlined /></template>
+              {{ currentLanguage.flag }} {{ currentLanguage.label }}
+            </a-button>
+            <template #overlay>
+              <a-menu @click="({ key }) => handleLanguageChange(key as string)">
+                <a-menu-item 
+                  v-for="option in languageOptions" 
+                  :key="option.value"
+                  :class="{ 'ant-menu-item-selected': locale === option.value }"
+                >
+                  {{ option.flag }} {{ option.label }}
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
           <!-- 网络切换按钮 -->
           <a-dropdown trigger="click" placement="bottomRight">
             <a-button class="network-switch-btn">
@@ -202,6 +247,29 @@ const handleNetworkChange = (newNetwork: NetworkType) => {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+}
+
+/* 语言切换按钮 */
+.language-switch-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px;
+}
+
+.language-switch-btn:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
 }
 
 /* 网络切换按钮 */

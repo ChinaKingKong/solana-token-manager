@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import { Transaction, SystemProgram, Keypair, PublicKey } from '@solana/web3.js';
 import {
   getMint,
@@ -19,6 +20,8 @@ import {
   ToolOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+
+const { t } = useI18n();
 
 // 使用钱包Hook
 const walletContext = useWallet();
@@ -56,17 +59,17 @@ const isFormValid = computed(() => {
 // 创建代币
 const createToken = async () => {
   if (!isFormValid.value) {
-    message.error('请检查表单信息是否正确');
+    message.error(t('createToken.nameRequired'));
     return;
   }
 
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   if (!walletState.value?.wallet) {
-    message.error('钱包未连接');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
@@ -134,7 +137,7 @@ const createToken = async () => {
       console.error('获取代币信息失败:', error);
     }
 
-    message.success('代币创建成功!');
+    message.success(t('createToken.createSuccess'));
 
     // 清空表单
     tokenName.value = '';
@@ -144,9 +147,9 @@ const createToken = async () => {
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
-      message.warning('您已取消交易');
+      message.warning(t('createToken.userCancelled'));
     } else {
-      message.error(`创建代币失败: ${error.message || '未知错误'}`);
+      message.error(`${t('createToken.createFailed')}: ${error.message || t('common.error')}`);
     }
   } finally {
     creating.value = false;
@@ -157,10 +160,10 @@ const createToken = async () => {
 const copyAddress = (address: string) => {
   navigator.clipboard.writeText(address)
     .then(() => {
-      message.success('地址已复制到剪贴板');
+      message.success(t('wallet.addressCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('common.error'));
     });
 };
 
@@ -218,8 +221,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
-        <p class="text-white/60">连接钱包后即可创建新代币</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('wallet.connectWallet') }}</h3>
+        <p class="text-white/60">{{ t('createToken.title') }}</p>
       </div>
     </div>
 
@@ -234,8 +237,8 @@ defineOptions({
           <div class="flex items-center gap-3 mb-6">
             <CheckCircleOutlined class="text-3xl text-[#52c41a]" />
             <div>
-              <h3 class="m-0 text-xl font-semibold text-white">代币创建成功！</h3>
-              <p class="m-0 text-sm text-white/60 mt-1">您的代币已成功创建，请妥善保存以下信息</p>
+              <h3 class="m-0 text-xl font-semibold text-white">{{ t('createToken.createSuccess') }}</h3>
+              <p class="m-0 text-sm text-white/60 mt-1">{{ t('createToken.createSuccess') }}</p>
             </div>
           </div>
 
@@ -243,7 +246,7 @@ defineOptions({
             <!-- Mint 地址 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center gap-2 mb-2">
-                <span class="text-sm font-medium text-white/80">Mint 地址</span>
+                <span class="text-sm font-medium text-white/80">{{ t('setMetadata.successMintAddress') }}</span>
               </div>
               <div class="flex items-center gap-2">
                 <div
@@ -255,14 +258,14 @@ defineOptions({
                   <template #icon>
                     <CopyOutlined />
                   </template>
-                  复制
+                  {{ t('common.copy') }}
                 </a-button>
                 <a-button @click="viewOnSolscan(createdTokenMint)"
                   class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-4 py-2.5 h-auto rounded-lg transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
                   <template #icon>
                     <GlobalOutlined />
                   </template>
-                  Solscan
+                  {{ t('setMetadata.viewOnSolscan') }}
                 </a-button>
               </div>
             </div>
@@ -270,19 +273,19 @@ defineOptions({
             <!-- 代币信息 -->
             <div v-if="createdTokenInfo" class="grid grid-cols-2 gap-4">
               <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-                <div class="text-xs font-medium text-white/60 mb-1">小数位数</div>
+                <div class="text-xs font-medium text-white/60 mb-1">{{ t('createToken.decimals') }}</div>
                 <div class="text-base font-semibold text-white">{{ createdTokenInfo.decimals }}</div>
               </div>
               <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-                <div class="text-xs font-medium text-white/60 mb-1">铸币权限</div>
+                <div class="text-xs font-medium text-white/60 mb-1">{{ t('createToken.keepMintAuthority') }}</div>
                 <div class="text-sm font-mono text-white/90 truncate">
-                  {{ createdTokenInfo.mintAuthority ? formatAddress(createdTokenInfo.mintAuthority) : '无' }}
+                  {{ createdTokenInfo.mintAuthority ? formatAddress(createdTokenInfo.mintAuthority) : t('common.cancel') }}
                 </div>
               </div>
               <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-                <div class="text-xs font-medium text-white/60 mb-1">冻结权限</div>
+                <div class="text-xs font-medium text-white/60 mb-1">{{ t('createToken.keepFreezeAuthority') }}</div>
                 <div class="text-sm font-mono text-white/90 truncate">
-                  {{ createdTokenInfo.freezeAuthority ? formatAddress(createdTokenInfo.freezeAuthority) : '无' }}
+                  {{ createdTokenInfo.freezeAuthority ? formatAddress(createdTokenInfo.freezeAuthority) : t('common.cancel') }}
                 </div>
               </div>
             </div>
@@ -294,14 +297,14 @@ defineOptions({
                 <template #icon>
                   <PlusOutlined />
                 </template>
-                创建代币
+                {{ t('createToken.create') }}
               </a-button>
               <a-button @click="navigateToMint"
                 class="flex-1 flex items-center justify-center bg-white/10 border border-white/20 text-white px-6 py-2.5 h-auto text-[15px] hover:bg-white/15 hover:border-white/30 transition-all duration-300">
                 <template #icon>
                   <ToolOutlined />
                 </template>
-                铸造代币
+                {{ t('header.mintToken') }}
               </a-button>
             </div>
           </div>
@@ -320,34 +323,34 @@ defineOptions({
           <!-- 代币名称 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              代币名称 <span class="text-red-400">*</span>
+              {{ t('createToken.name') }} <span class="text-red-400">*</span>
             </label>
-            <a-input v-model:value="tokenName" placeholder="例如: My Token" size="large"
+            <a-input v-model:value="tokenName" :placeholder="t('createToken.namePlaceholder')" size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
               :class="{ '!border-solana-green': tokenName }" />
-            <div class="mt-1.5 text-xs text-white/50">代币的显示名称，用于标识您的代币</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('createToken.name') }}</div>
           </div>
 
           <!-- 代币符号 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              代币符号 <span class="text-red-400">*</span>
+              {{ t('createToken.symbol') }} <span class="text-red-400">*</span>
             </label>
-            <a-input v-model:value="tokenSymbol" placeholder="例如: MTK" size="large"
+            <a-input v-model:value="tokenSymbol" :placeholder="t('createToken.symbolPlaceholder')" size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl uppercase"
               :class="{ '!border-solana-green': tokenSymbol }" :maxlength="10" />
-            <div class="mt-1.5 text-xs text-white/50">代币的符号，通常为大写字母，最多10个字符</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('createToken.symbol') }}</div>
           </div>
 
           <!-- 小数位数 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              小数位数 <span class="text-red-400">*</span>
+              {{ t('createToken.decimals') }} <span class="text-red-400">*</span>
             </label>
             <a-input-number v-model:value="tokenDecimals" :min="0" :max="9" size="large"
               class="w-full bg-white/5 border-white/20 text-white rounded-xl"
               :class="{ '!border-solana-green': tokenDecimals >= 0 }" />
-            <div class="mt-1.5 text-xs text-white/50">设置代币的小数位数，范围0-9，推荐使用9</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('createToken.decimalsPlaceholder') }}</div>
           </div>
 
           <!-- 权限设置 -->
@@ -355,16 +358,16 @@ defineOptions({
             <div class="flex items-start gap-3 p-4 bg-white/5 rounded-xl border border-white/10">
               <a-checkbox v-model:checked="keepMintAuthority" class="!text-white" />
               <div class="flex-1">
-                <div class="text-sm font-medium text-white/90 mb-1">保留铸币权限</div>
-                <div class="text-xs text-white/50">如果保留铸币权限，您可以在之后铸造更多的代币</div>
+                <div class="text-sm font-medium text-white/90 mb-1">{{ t('createToken.keepMintAuthority') }}</div>
+                <div class="text-xs text-white/50">{{ t('createToken.keepMintAuthority') }}</div>
               </div>
             </div>
 
             <div class="flex items-start gap-3 p-4 bg-white/5 rounded-xl border border-white/10">
               <a-checkbox v-model:checked="keepFreezeAuthority" class="!text-white" />
               <div class="flex-1">
-                <div class="text-sm font-medium text-white/90 mb-1">保留冻结权限</div>
-                <div class="text-xs text-white/50">如果保留冻结权限，您可以在之后冻结任何代币账户</div>
+                <div class="text-sm font-medium text-white/90 mb-1">{{ t('createToken.keepFreezeAuthority') }}</div>
+                <div class="text-xs text-white/50">{{ t('createToken.keepFreezeAuthority') }}</div>
               </div>
             </div>
           </div>
@@ -393,7 +396,7 @@ defineOptions({
               <template #icon>
                 <PlusOutlined />
               </template>
-              {{ creating ? '创建中...' : '创建代币' }}
+              {{ creating ? t('createToken.creating') : t('createToken.create') }}
             </a-button>
           </div>
         </div>

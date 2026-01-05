@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import { PublicKey } from '@solana/web3.js';
 import { useWallet } from '../../hooks/useWallet';
+
+const { t } = useI18n();
 import {
   ReloadOutlined,
   CopyOutlined,
@@ -58,7 +61,7 @@ const handlePageChange = (page: number) => {
 // 获取交易历史
 const fetchTransactionHistory = async () => {
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
@@ -100,9 +103,9 @@ const fetchTransactionHistory = async () => {
 
     transactions.value = transactionDetails;
     currentPage.value = 1; // 重置到第一页
-    message.success(`成功加载 ${transactions.value.length} 条交易记录`);
+    message.success(t('transactionHistory.loadSuccess'));
   } catch (error) {
-    message.error('获取交易历史失败');
+    message.error(t('transactionHistory.loadFailed'));
     console.error(error);
   } finally {
     loading.value = false;
@@ -168,10 +171,10 @@ const viewTransactionDetail = async (signature: string) => {
 const copySignature = (signature: string) => {
   navigator.clipboard.writeText(signature)
     .then(() => {
-      message.success('已复制签名到剪贴板');
+      message.success(t('wallet.addressCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('common.error'));
     });
 };
 
@@ -438,8 +441,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
-        <p class="text-white/60">连接钱包后即可查看交易历史记录</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('wallet.connectWallet') }}</h3>
+        <p class="text-white/60">{{ t('transactionHistory.title') }}</p>
       </div>
     </div>
 
@@ -453,7 +456,7 @@ defineOptions({
         <div class="relative z-[1] space-y-6">
           <!-- 标题和刷新按钮 -->
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h2 class="m-0 text-2xl font-semibold text-white">交易历史</h2>
+            <h2 class="m-0 text-2xl font-semibold text-white">{{ t('transactionHistory.title') }}</h2>
             <a-button
               type="primary"
               :loading="loading"
@@ -462,7 +465,7 @@ defineOptions({
               <template #icon>
                 <ReloadOutlined />
               </template>
-              刷新记录
+              {{ t('transactionHistory.refresh') }}
             </a-button>
           </div>
 
@@ -474,7 +477,7 @@ defineOptions({
                   <HistoryOutlined class="text-2xl text-solana-green" />
                 </div>
                 <div>
-                  <div class="text-xs font-medium text-white/60 mb-1">总交易数</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('transactionHistory.total') }}</div>
                   <div class="text-2xl font-bold text-white">{{ stats.total }}</div>
                 </div>
               </div>
@@ -485,7 +488,7 @@ defineOptions({
                   <CheckCircleOutlined class="text-2xl text-green-400" />
                 </div>
                 <div>
-                  <div class="text-xs font-medium text-white/60 mb-1">成功交易</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('transactionHistory.success') }}</div>
                   <div class="text-2xl font-bold text-green-400">{{ stats.success }}</div>
                 </div>
               </div>
@@ -496,7 +499,7 @@ defineOptions({
                   <CloseCircleOutlined class="text-2xl text-red-400" />
                 </div>
                 <div>
-                  <div class="text-xs font-medium text-white/60 mb-1">失败交易</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('transactionHistory.failed') }}</div>
                   <div class="text-2xl font-bold text-red-400">{{ stats.failed }}</div>
                 </div>
               </div>
@@ -507,7 +510,7 @@ defineOptions({
                   <ClockCircleOutlined class="text-2xl text-blue-400" />
                 </div>
                 <div>
-                  <div class="text-xs font-medium text-white/60 mb-1">最新交易</div>
+                  <div class="text-xs font-medium text-white/60 mb-1">{{ t('transactionHistory.latest') }}</div>
                   <div class="text-sm font-semibold text-white">
                     {{ transactions.length > 0 ? formatTime(transactions[0].blockTime) : 'N/A' }}
                   </div>
@@ -554,7 +557,7 @@ defineOptions({
                     <template #icon>
                       <GlobalOutlined />
                     </template>
-                    Solscan
+                    {{ t('transactionHistory.viewOnSolscan') }}
                   </a-button>
                 </div>
               </div>
@@ -564,7 +567,7 @@ defineOptions({
           <!-- 空状态 -->
           <div v-else class="text-center py-12">
             <HistoryOutlined class="text-6xl text-white/30 mb-4" />
-            <p class="text-white/60">暂无交易记录</p>
+            <p class="text-white/60">{{ t('transactionHistory.empty') }}</p>
           </div>
 
           <!-- 分页组件 -->
@@ -586,7 +589,7 @@ defineOptions({
     <!-- 交易详情模态框 -->
     <a-modal
       v-model:open="detailModalVisible"
-      title="交易详情"
+      :title="t('transactionHistory.detail')"
       width="58%"
       :footer="null"
       class="transaction-detail-modal"
@@ -599,7 +602,7 @@ defineOptions({
             <div class="flex items-center justify-between mb-4">
               <h3 class="m-0 text-xl font-semibold text-white flex items-center">
                 <WalletOutlined class="mr-2 text-solana-green" />
-                基本信息
+                {{ t('transactionHistory.detailBasicInfo') }}
               </h3>
               <a-button
                 v-if="selectedTransaction.signature"
@@ -609,12 +612,12 @@ defineOptions({
                 <template #icon>
                   <GlobalOutlined />
                 </template>
-                Solscan
+                {{ t('transactionHistory.viewOnSolscan') }}
               </a-button>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div class="sm:col-span-2">
-                <div class="text-xs font-medium text-white/60 mb-2">交易签名</div>
+                <div class="text-xs font-medium text-white/60 mb-2">{{ t('transactionHistory.detailSignature') }}</div>
                 <div class="flex items-center gap-2 bg-white/5 rounded-xl p-3 border border-white/10">
                   <code class="text-sm text-white/90 font-mono break-all flex-1 min-w-0">{{ selectedTransaction.signature || 'N/A' }}</code>
                   <a-button
@@ -626,12 +629,12 @@ defineOptions({
                     <template #icon>
                       <CopyOutlined />
                     </template>
-                    复制
+                    {{ t('common.copy') }}
                   </a-button>
                 </div>
               </div>
               <div>
-                <div class="text-xs font-medium text-white/60 mb-2">状态</div>
+                <div class="text-xs font-medium text-white/60 mb-2">{{ t('transactionHistory.detailStatus') }}</div>
                 <a-tag :color="getStatus(selectedTransaction).color">
                   <component :is="getStatus(selectedTransaction).icon" class="mr-1" />
                   {{ getStatus(selectedTransaction).text }}

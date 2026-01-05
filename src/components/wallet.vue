@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { message } from "ant-design-vue";
+import { useI18n } from 'vue-i18n';
 import { useWallet } from '../hooks/useWallet';
 import { CopyOutlined, DisconnectOutlined, WalletOutlined, DownOutlined } from '@ant-design/icons-vue';
+
+const { t } = useI18n();
 
 // 使用钱包Hook
 const {
@@ -21,7 +24,7 @@ const showWalletMenu = ref(false);
 // 获取钱包显示文本
 const getWalletDisplayText = computed(() => {
   if (!walletState.value.connected) {
-    return "连接钱包";
+    return t('wallet.connectWallet');
   }
 
   if (walletState.value.publicKey) {
@@ -30,11 +33,11 @@ const getWalletDisplayText = computed(() => {
       return `${publicKeyStr.slice(0, 4)}...${publicKeyStr.slice(-4)}`;
     } catch (error) {
       console.error('获取公钥字符串失败:', error);
-      return "地址错误";
+      return t('wallet.addressError');
     }
   }
 
-  return "连接钱包";
+  return t('wallet.connectWallet');
 });
 
 // 获取余额显示
@@ -59,9 +62,9 @@ const handleSelectWallet = async (walletAdapter: any) => {
 
   try {
     await connectWallet(walletAdapter);
-    message.success(`成功连接 ${walletAdapter.name}`);
+    message.success(`${t('wallet.walletConnected')} ${walletAdapter.name}`);
   } catch (error: any) {
-    message.error(`连接失败: ${error.message || '未知错误'}`);
+    message.error(`${t('wallet.connectFailed')}: ${error.message || t('common.error')}`);
     console.error(error);
   }
 };
@@ -73,10 +76,10 @@ const copyAddress = () => {
     const address = walletState.value.publicKey.toBase58();
     navigator.clipboard.writeText(address)
       .then(() => {
-        message.success("地址已复制到剪贴板");
+        message.success(t('wallet.addressCopied'));
       })
       .catch(() => {
-        message.error("复制失败");
+        message.error(t('common.error'));
       });
   }
 };
@@ -86,9 +89,9 @@ const handleDisconnect = async () => {
   showWalletMenu.value = false;
   try {
     await disconnectWallet();
-    message.success("钱包已断开连接");
+    message.success(t('wallet.disconnectWallet'));
   } catch (error) {
-    message.error("断开连接失败");
+    message.error(t('common.error'));
     console.error(error);
   }
 };
@@ -144,12 +147,12 @@ const availableWallets = computed(() => {
           <a-menu class="bg-white border border-black/10 rounded-lg p-1 min-w-[160px] shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
             <a-menu-item key="copy" @click="copyAddress" class="flex items-center gap-4 px-3 py-2.5 text-black/85 rounded-md transition-all duration-200 ease-in-out hover:bg-[rgba(20,241,149,0.1)] hover:text-solana-green">
               <CopyOutlined class="text-sm" />
-              <span>复制地址</span>
+              <span>{{ t('wallet.copyAddress') }}</span>
             </a-menu-item>
             <a-menu-divider />
             <a-menu-item key="disconnect" @click="handleDisconnect" class="flex items-center gap-4 px-3 py-2.5 text-[rgba(255,77,79,0.85)] rounded-md transition-all duration-200 ease-in-out hover:bg-[rgba(255,77,79,0.1)] hover:text-[#ff4d4f]">
               <DisconnectOutlined class="text-sm" />
-              <span>断开连接</span>
+              <span>{{ t('wallet.disconnectWallet') }}</span>
             </a-menu-item>
           </a-menu>
         </template>
@@ -166,13 +169,13 @@ const availableWallets = computed(() => {
       class="bg-gradient-solana border-none text-dark-bg font-semibold px-6 h-9 text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] active:-translate-y-0.5 focus:-translate-y-0.5 focus:shadow-[0_6px_20px_rgba(20,241,149,0.4)] focus:outline-none flex items-center justify-center gap-1"
     >
       <template #icon><WalletOutlined /></template>
-      {{ walletState.connecting ? '连接中...' : '连接钱包' }}
+      {{ walletState.connecting ? t('common.loading') : t('wallet.connectWallet') }}
     </a-button>
 
     <!-- 钱包选择器模态框 -->
     <a-modal
       v-model:open="showWalletSelector"
-      title="选择钱包"
+      :title="t('wallet.connectWallet')"
       :footer="null"
       width="360px"
       class="wallet-selector-modal"

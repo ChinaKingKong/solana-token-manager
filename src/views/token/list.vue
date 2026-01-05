@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined, PlusOutlined } from '@ant-design/icons-vue';
 import { PublicKey } from '@solana/web3.js';
 import { useWallet } from '../../hooks/useWallet';
 import { fetchOnChainMetadata } from '../../utils/metadata';
+
+const { t } = useI18n();
 
 // 代币数据接口
 interface TokenData {
@@ -80,16 +83,16 @@ const debugInfo = ref({
 // 刷新余额
 const refreshBalance = async () => {
   if (!walletState.value || !walletState.value.connected) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   try {
     await fetchBalance();
     await fetchTokenList();
-    message.success('余额已更新');
+    message.success(t('common.success'));
   } catch (error) {
-    message.error('获取余额失败');
+    message.error(t('common.error'));
   }
 };
 
@@ -104,7 +107,7 @@ const fetchTokenList = async () => {
   }
 
   if (!walletState.value.publicKey) {
-    message.error('钱包公钥无效，请重新连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
@@ -229,7 +232,7 @@ const fetchTokenList = async () => {
     await fetchTokenMetadata();
 
   } catch (error: any) {
-    message.error(`获取代币列表失败: ${error.message || '未知错误'}`);
+    message.error(`${t('tokenList.title')}: ${error.message || t('common.error')}`);
 
     // 更新调试信息
     debugInfo.value.errorCount++;
@@ -362,10 +365,10 @@ const formatAddress = (address: string) => {
 const copyAddress = (address: string, type: string = '地址') => {
   navigator.clipboard.writeText(address)
     .then(() => {
-      message.success(`${type}已复制到剪贴板`);
+      message.success(t('wallet.addressCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('common.error'));
     });
 };
 
@@ -494,8 +497,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
-        <p class="text-white/60">连接钱包后即可查看和管理您的代币资产</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('wallet.connectWallet') }}</h3>
+        <p class="text-white/60">{{ t('tokenList.title') }}</p>
       </div>
     </div>
 
@@ -507,8 +510,8 @@ defineOptions({
             <AppstoreOutlined class="text-5xl text-white/30" />
           </div>
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">暂无代币</h3>
-        <p class="text-white/60 mb-6">您还没有任何代币，可以去创建新代币</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('tokenList.emptyTitle') }}</h3>
+        <p class="text-white/60 mb-6">{{ t('tokenList.emptyDescription') }}</p>
         <div class="flex justify-center">
           <a-button
             type="primary"
@@ -518,7 +521,7 @@ defineOptions({
             <template #icon>
               <PlusOutlined />
             </template>
-            创建代币
+            {{ t('tokenList.createToken') }}
           </a-button>
         </div>
       </div>
@@ -527,7 +530,7 @@ defineOptions({
     <!-- 加载状态 -->
     <div v-else-if="loading" class="flex flex-col items-center justify-center min-h-[400px] gap-4">
       <a-spin size="large" />
-      <p class="text-white/80">正在加载代币数据...</p>
+      <p class="text-white/80">{{ t('common.loading') }}</p>
     </div>
 
     <!-- 代币列表 -->
@@ -535,17 +538,17 @@ defineOptions({
       <!-- 标题区域 -->
       <div
         class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 px-4 sm:px-6 py-4 bg-[rgba(26,34,53,0.6)] rounded-2xl border border-white/10 backdrop-blur-[10px]">
-        <h2 class="m-0 text-lg sm:text-xl font-semibold text-white">代币列表</h2>
+        <h2 class="m-0 text-lg sm:text-xl font-semibold text-white">{{ t('tokenList.title') }}</h2>
         <div class="flex items-center gap-3 flex-wrap">
           <span
-            class="px-3 py-1.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] rounded-full border border-[rgba(20,241,149,0.2)]">共
-            {{ tokens.length }} 个代币</span>
+            class="px-3 py-1.5 text-xs font-medium text-solana-green bg-[rgba(20,241,149,0.1)] rounded-full border border-[rgba(20,241,149,0.2)]">{{ t('tokenList.totalTokens') }}:
+            {{ tokens.length }}</span>
           <a-button :loading="loading" @click="refreshBalance" size="default"
             class="flex items-center justify-center bg-white/10 border border-white/20 text-white px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-300 ease-in-out hover:bg-white/15 hover:border-white/30">
             <template #icon>
               <ReloadOutlined />
             </template>
-            刷新余额
+            {{ t('common.loading') }}
           </a-button>
         </div>
       </div>

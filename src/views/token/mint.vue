@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import {
   getOrCreateAssociatedTokenAccount,
@@ -21,6 +22,8 @@ import {
   GlobalOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+
+const { t } = useI18n();
 
 // 使用钱包Hook
 const walletContext = useWallet();
@@ -103,7 +106,7 @@ const fetchTokenInfo = async () => {
 
     decimals.value = mintInfo.decimals;
   } catch (error: any) {
-    message.error(`获取代币信息失败: ${error.message || '请检查Mint地址'}`);
+    message.error(`${t('mintToken.mintFailed')}: ${error.message || t('mintToken.mintAddressRequired')}`);
     tokenInfo.value = null;
   } finally {
     loadingInfo.value = false;
@@ -131,7 +134,7 @@ const fetchCurrentBalance = async () => {
 
     currentBalance.value = Number(tokenAccount.amount) / Math.pow(10, decimals.value);
   } catch (error: any) {
-    message.error(`获取余额失败: ${error.message || '未知错误'}`);
+    message.error(`${t('common.error')}: ${error.message || t('common.error')}`);
     currentBalance.value = 0;
   } finally {
     loadingBalance.value = false;
@@ -141,17 +144,17 @@ const fetchCurrentBalance = async () => {
 // 铸造代币
 const handleMint = async () => {
   if (!isFormValid.value) {
-    message.error('请检查表单信息是否正确');
+    message.error(t('mintToken.mintAddressRequired'));
     return;
   }
 
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   if (!walletState.value?.wallet) {
-    message.error('钱包未连接');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
@@ -169,11 +172,11 @@ const handleMint = async () => {
       targetPubkey = payerPubkey;
     } else {
       if (!targetWalletAddress.value.trim()) {
-        message.error('请输入目标钱包地址');
+        message.error(t('mintToken.targetAddressRequired'));
         return;
       }
       if (!isValidSolanaAddress(targetWalletAddress.value)) {
-        message.error('目标钱包地址格式不正确');
+        message.error(t('mintToken.addressInvalid'));
         return;
       }
       targetPubkey = new PublicKey(targetWalletAddress.value);
@@ -234,7 +237,7 @@ const handleMint = async () => {
     const signature = await wallet.sendTransaction(transaction, conn);
     await conn.confirmTransaction(signature, 'confirmed');
 
-    message.success(`成功铸造 ${mintAmount.value} 代币!`);
+    message.success(t('mintToken.mintSuccess'));
 
     // 刷新余额和代币信息
     await fetchCurrentBalance();
@@ -247,11 +250,11 @@ const handleMint = async () => {
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
-      message.warning('您已取消交易');
+      message.warning(t('mintToken.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('TokenAccountNotFoundError')) {
-      message.error('代币账户不存在，请先创建关联代币账户');
+      message.error(t('mintToken.mintFailed'));
     } else {
-      message.error(`铸造代币失败: ${error.message || '未知错误'}`);
+      message.error(`${t('mintToken.mintFailed')}: ${error.message || t('common.error')}`);
     }
   } finally {
     minting.value = false;
@@ -262,10 +265,10 @@ const handleMint = async () => {
 const copyAddress = (address: string) => {
   navigator.clipboard.writeText(address)
     .then(() => {
-      message.success('地址已复制到剪贴板');
+      message.success(t('wallet.addressCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('common.error'));
     });
 };
 
@@ -321,8 +324,8 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">请先连接钱包</h3>
-        <p class="text-white/60">连接钱包后即可铸造代币</p>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('wallet.connectWallet') }}</h3>
+        <p class="text-white/60">{{ t('header.mintToken') }}</p>
       </div>
     </div>
 
@@ -337,23 +340,23 @@ defineOptions({
           <!-- Mint 地址 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              Mint 地址 <span class="text-red-400">*</span>
+              {{ t('mintToken.mintAddress') }} <span class="text-red-400">*</span>
             </label>
             <a-input
               v-model:value="tokenMintAddress"
-              placeholder="请输入代币的Mint地址"
+              :placeholder="t('mintToken.mintAddressPlaceholder')"
               size="large"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': tokenMintAddress }"
             />
-            <div class="mt-1.5 text-xs text-white/50">输入要铸造的代币的Mint地址</div>
+            <div class="mt-1.5 text-xs text-white/50">{{ t('mintToken.mintAddress') }}</div>
           </div>
 
           <!-- 代币信息显示 -->
           <div v-if="tokenInfo" class="space-y-4">
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center justify-between mb-4">
-                <h3 class="m-0 text-base font-semibold text-white">代币信息</h3>
+                <h3 class="m-0 text-base font-semibold text-white">{{ t('tokenList.title') }}</h3>
                 <a-button
                   @click="fetchTokenInfo"
                   :loading="loadingInfo"
@@ -362,7 +365,7 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  刷新
+                  {{ t('common.loading') }}
                 </a-button>
               </div>
               <div class="grid grid-cols-2 gap-4">
@@ -420,8 +423,8 @@ defineOptions({
                 class="!text-white"
               />
               <div class="flex-1">
-                <div class="text-sm font-medium text-white/90 mb-1">铸造到当前钱包</div>
-                <div class="text-xs text-white/50">代币将铸造到当前连接的钱包地址</div>
+                <div class="text-sm font-medium text-white/90 mb-1">{{ t('mintToken.mintToCurrentWallet') }}</div>
+                <div class="text-xs text-white/50">{{ t('mintToken.mintToCurrentWallet') }}</div>
                 <div v-if="walletState?.publicKey" class="text-xs text-white/40 mt-1 font-mono">
                   {{ formatAddress(walletState.publicKey?.toString() || '') }}
                 </div>
@@ -430,20 +433,20 @@ defineOptions({
 
             <div v-if="!mintToCurrentWallet">
               <label class="block text-sm font-medium text-white/90 mb-2">
-                目标钱包地址 <span class="text-red-400">*</span>
+                {{ t('mintToken.targetWalletAddress') }} <span class="text-red-400">*</span>
               </label>
               <a-input
                 v-model:value="targetWalletAddress"
-                placeholder="请输入目标钱包地址"
+                :placeholder="t('mintToken.targetWalletAddressPlaceholder')"
                 size="large"
                 class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
                 :class="{ '!border-solana-green': targetWalletAddress && isValidSolanaAddress(targetWalletAddress), '!border-red-500': targetWalletAddress && !isValidSolanaAddress(targetWalletAddress) }"
               />
               <div class="mt-1.5 text-xs text-white/50">
-                代币将铸造到指定的钱包地址
+                {{ t('mintToken.targetWalletAddress') }}
               </div>
               <div v-if="targetWalletAddress && !isValidSolanaAddress(targetWalletAddress)" class="mt-1.5 text-xs text-red-400">
-                地址格式不正确
+                {{ t('mintToken.addressInvalid') }}
               </div>
             </div>
           </div>
@@ -451,7 +454,7 @@ defineOptions({
           <!-- 铸造数量 -->
           <div>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              铸造数量 <span class="text-red-400">*</span>
+              {{ t('mintToken.amount') }} <span class="text-red-400">*</span>
             </label>
             <a-input-number
               v-model:value="mintAmount"
@@ -496,7 +499,7 @@ defineOptions({
               <template #icon>
                 <ToolOutlined />
               </template>
-              {{ minting ? '铸造中...' : '铸造代币' }}
+              {{ minting ? t('mintToken.minting') : t('mintToken.mint') }}
             </a-button>
           </div>
         </div>

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import type { UploadProps } from 'ant-design-vue';
+
+const { t } = useI18n();
 import { 
   uploadFileToIPFS, 
   uploadJSONToIPFS, 
@@ -51,13 +54,13 @@ const actualNewUrl = ref('');
 const validateApiKey = async () => {
   if (authMode.value === 'jwt') {
     if (!pinataJwt.value) {
-      message.error('请输入Pinata JWT');
+      message.error(t('ipfsUpload.jwtRequired'));
       apiKeyValid.value = false;
       return false;
     }
   } else {
     if (!pinataApiKey.value || !pinataSecretApiKey.value) {
-      message.error('请输入Pinata API密钥和Secret密钥');
+      message.error(t('ipfsUpload.apiKeyRequired'));
       apiKeyValid.value = false;
       return false;
     }
@@ -73,15 +76,15 @@ const validateApiKey = async () => {
     apiKeyValid.value = isValid;
     
     if (isValid) {
-      message.success(authMode.value === 'jwt' ? 'Pinata JWT验证成功' : 'Pinata API密钥验证成功');
+      message.success(t('ipfsUpload.validateSuccess'));
     } else {
-      message.error(authMode.value === 'jwt' ? 'Pinata JWT无效' : 'Pinata API密钥无效');
+      message.error(t('ipfsUpload.validateFailed'));
     }
     
     return isValid;
   } catch (error) {
     console.error('验证凭证时出错:', error);
-    message.error('验证凭证时出错');
+    message.error(t('ipfsUpload.validateFailed'));
     apiKeyValid.value = false;
     return false;
   } finally {
@@ -106,10 +109,10 @@ const editUploadedJson = () => {
     // 切换到JSON编辑模式
     uploadMode.value = 'json';
     
-    message.info('已加载JSON内容到编辑器，您可以修改后重新上传');
+    message.info(t('ipfsUpload.editAndReupload'));
   } else {
     console.error('没有可编辑的JSON内容');
-    message.error('没有可编辑的JSON内容');
+    message.error(t('ipfsUpload.jsonContentRequired'));
     isEditingUploadedJson.value = false;
   }
 };
@@ -130,7 +133,7 @@ watch(uploadMode, () => {
 const beforeUpload: UploadProps['beforeUpload'] = (file) => {
   const isLt10M = file.size / 1024 / 1024 < 10;
   if (!isLt10M) {
-    message.error('文件大小不能超过10MB!');
+    message.error(t('ipfsUpload.fileRequired'));
   }
   // 阻止自动上传，返回 false 或 Upload.LIST_IGNORE
   return false;
@@ -158,7 +161,7 @@ const handleFileChange = (info: any) => {
 // 处理文件上传
 const handleFileUpload = async () => {
   if (fileList.value.length === 0) {
-    message.error('请先选择要上传的文件');
+    message.error(t('ipfsUpload.fileRequired'));
     return;
   }
   
@@ -201,14 +204,14 @@ const handleFileUpload = async () => {
         uploadedJsonContent.value = null;
       }
       
-      message.success('文件上传成功');
+      message.success(t('ipfsUpload.uploadSuccess'));
     } else {
       uploadStatus.value = 'error';
-      message.error('文件上传失败');
+      message.error(t('ipfsUpload.uploadFailed'));
     }
   } catch (error) {
     uploadStatus.value = 'error';
-    message.error('上传过程中发生错误');
+    message.error(t('ipfsUpload.uploadFailed'));
     console.error(error);
   } finally {
     uploading.value = false;
@@ -218,7 +221,7 @@ const handleFileUpload = async () => {
 // 处理JSON上传
 const handleJsonUpload = async () => {
   if (!jsonContent.value.trim()) {
-    message.error('JSON内容不能为空');
+    message.error(t('ipfsUpload.jsonContentRequired'));
     return;
   }
   
@@ -278,24 +281,24 @@ const handleJsonUpload = async () => {
       
       if (isEditingUploadedJson.value) {
         if (keepOriginalUrl.value) {
-          message.success('JSON内容已更新，URL保持不变');
+          message.success(t('ipfsUpload.update'));
         } else {
-          message.success('JSON内容已更新并生成新URL');
+          message.success(t('ipfsUpload.update'));
         }
         isEditingUploadedJson.value = false;
       } else {
-        message.success('JSON上传成功');
+        message.success(t('ipfsUpload.uploadSuccess'));
       }
     } else {
       uploadStatus.value = 'error';
-      message.error('JSON上传失败');
+      message.error(t('ipfsUpload.uploadFailed'));
     }
   } catch (error) {
     uploadStatus.value = 'error';
     if (error instanceof SyntaxError) {
-      message.error('无效的JSON格式');
+      message.error(t('ipfsUpload.uploadFailed'));
     } else {
-      message.error('上传过程中发生错误');
+      message.error(t('ipfsUpload.uploadFailed'));
     }
     console.error(error);
   } finally {
@@ -307,10 +310,10 @@ const handleJsonUpload = async () => {
 const copyUrl = (url: string) => {
   navigator.clipboard.writeText(url)
     .then(() => {
-      message.success('已复制到剪贴板');
+      message.success(t('ipfsUpload.urlCopied'));
     })
     .catch(() => {
-      message.error('复制失败');
+      message.error(t('common.error'));
     });
 };
 
@@ -376,7 +379,7 @@ defineOptions({
         <div class="relative z-[1] space-y-6">
           <!-- 标题和说明 -->
           <div>
-            <h2 class="m-0 text-2xl font-semibold text-white mb-2">上传到IPFS</h2>
+            <h2 class="m-0 text-2xl font-semibold text-white mb-2">{{ t('ipfsUpload.title') }}</h2>
             <div class="flex items-start gap-3 p-4 bg-[rgba(20,241,149,0.1)] rounded-xl border border-[rgba(20,241,149,0.2)]">
               <InfoCircleOutlined class="text-solana-green text-lg shrink-0 mt-0.5" />
               <div class="flex-1">
@@ -394,17 +397,17 @@ defineOptions({
 
           <!-- Pinata API配置 -->
           <div class="bg-white/5 rounded-xl p-4 border border-white/10">
-            <h3 class="m-0 text-lg font-semibold text-white mb-4">Pinata IPFS配置</h3>
+            <h3 class="m-0 text-lg font-semibold text-white mb-4">{{ t('ipfsUpload.pinataConfig') }}</h3>
             <div class="space-y-4">
               <!-- 认证方式选择 -->
               <div>
-                <label class="block text-sm font-medium text-white/90 mb-2">认证方式</label>
+                <label class="block text-sm font-medium text-white/90 mb-2">{{ t('ipfsUpload.authMode') }}</label>
                 <a-radio-group v-model:value="authMode" button-style="solid" class="w-full">
                   <a-radio-button value="apiKey" class="flex-1">
-                    API Key + Secret（推荐）
+                    {{ t('ipfsUpload.apiKeyMode') }}
                   </a-radio-button>
                   <a-radio-button value="jwt" class="flex-1">
-                    JWT
+                    {{ t('ipfsUpload.jwtMode') }}
                   </a-radio-button>
                 </a-radio-group>
               </div>
@@ -413,11 +416,11 @@ defineOptions({
               <template v-if="authMode === 'apiKey'">
                 <div>
                   <label class="block text-sm font-medium text-white/90 mb-2">
-                    Pinata API Key <span class="text-red-400">*</span>
+                    {{ t('ipfsUpload.pinataApiKey') }} <span class="text-red-400">*</span>
                   </label>
                   <a-input
                     v-model:value="pinataApiKey"
-                    placeholder="输入你的Pinata API Key"
+                    :placeholder="t('ipfsUpload.pinataApiKeyPlaceholder')"
                     size="large"
                     class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
                     :class="{ '!border-solana-green': pinataApiKey }"
@@ -426,11 +429,11 @@ defineOptions({
                 
                 <div>
                   <label class="block text-sm font-medium text-white/90 mb-2">
-                    Pinata Secret API Key <span class="text-red-400">*</span>
+                    {{ t('ipfsUpload.pinataSecretKey') }} <span class="text-red-400">*</span>
                   </label>
                   <a-input
                     v-model:value="pinataSecretApiKey"
-                    placeholder="输入你的Pinata Secret API Key"
+                    :placeholder="t('ipfsUpload.pinataSecretKeyPlaceholder')"
                     type="password"
                     size="large"
                     class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
@@ -445,11 +448,11 @@ defineOptions({
               <!-- JWT 模式 -->
               <div v-else>
                 <label class="block text-sm font-medium text-white/90 mb-2">
-                  Pinata JWT <span class="text-red-400">*</span>
+                  {{ t('ipfsUpload.pinataJwt') }} <span class="text-red-400">*</span>
                 </label>
                 <a-input
                   v-model:value="pinataJwt"
-                  placeholder="输入你的Pinata JWT（在Pinata App的API Keys页面创建）"
+                  :placeholder="t('ipfsUpload.pinataJwtPlaceholder')"
                   type="password"
                   size="large"
                   class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl"
@@ -469,11 +472,11 @@ defineOptions({
                   <template #icon>
                     <ReloadOutlined />
                   </template>
-                  验证{{ authMode === 'jwt' ? 'JWT' : 'API密钥' }}
+                  {{ t('ipfsUpload.validate') }}
                 </a-button>
                 <div v-if="apiKeyValid" class="flex items-center gap-2 text-green-400">
                   <CheckCircleOutlined />
-                  <span class="text-sm">{{ authMode === 'jwt' ? 'JWT' : 'API密钥' }}已验证</span>
+                  <span class="text-sm">{{ t('ipfsUpload.validateSuccess') }}</span>
                 </div>
               </div>
               
@@ -485,19 +488,19 @@ defineOptions({
 
           <!-- 上传模式选择 -->
           <div>
-            <label class="block text-sm font-medium text-white/90 mb-2">上传模式</label>
+            <label class="block text-sm font-medium text-white/90 mb-2">{{ t('ipfsUpload.uploadMode') }}</label>
             <a-radio-group v-model:value="uploadMode" button-style="solid" class="w-full">
               <a-radio-button value="file" class="flex-1">
                 <template #icon>
                   <UploadOutlined />
                 </template>
-                文件上传
+                {{ t('ipfsUpload.fileMode') }}
               </a-radio-button>
               <a-radio-button value="json" class="flex-1">
                 <template #icon>
                   <EditOutlined />
                 </template>
-                JSON编辑
+                {{ t('ipfsUpload.jsonMode') }}
               </a-radio-button>
             </a-radio-group>
           </div>
@@ -520,9 +523,9 @@ defineOptions({
               <p class="ant-upload-drag-icon text-white/60">
                 <InboxOutlined class="text-4xl" />
               </p>
-              <p class="ant-upload-text text-white">点击或拖拽文件到此区域上传</p>
+              <p class="ant-upload-text text-white">{{ t('ipfsUpload.dragFileHere') }}</p>
               <p class="ant-upload-hint text-white/70">
-                支持单个文件，如图片或JSON文件。文件大小不超过10MB。
+                {{ t('ipfsUpload.supportSingleFile') }}
               </p>
             </a-upload-dragger>
             
@@ -538,7 +541,7 @@ defineOptions({
                 <template #icon>
                   <UploadOutlined />
                 </template>
-                {{ uploading ? '上传中...' : '上传到IPFS' }}
+                {{ uploading ? t('ipfsUpload.uploading') : t('ipfsUpload.upload') }}
               </a-button>
             </div>
           </div>
@@ -546,22 +549,22 @@ defineOptions({
           <!-- JSON编辑模式 -->
           <div v-else>
             <label class="block text-sm font-medium text-white/90 mb-2">
-              JSON内容 <span class="text-red-400">*</span>
+              {{ t('ipfsUpload.jsonContent') }} <span class="text-red-400">*</span>
             </label>
             <a-textarea
               v-model:value="jsonContent"
               :rows="12"
-              placeholder='请输入JSON内容，例如：\n{\n  "name": "Token Name",\n  "symbol": "SYMBOL",\n  "description": "Token description",\n  "image": "ipfs://your-image-cid"\n}'
+              :placeholder="t('ipfsUpload.jsonContentPlaceholder')"
               class="bg-white/5 border-white/20 text-white placeholder:text-white/40 rounded-xl font-mono"
               :class="{ '!border-solana-green': jsonContent }"
             />
             
             <div v-if="isEditingUploadedJson" class="mt-4 p-4 bg-[rgba(250,173,20,0.1)] rounded-xl border border-[rgba(250,173,20,0.2)]">
               <a-checkbox v-model:checked="keepOriginalUrl" class="text-white/90">
-                保持原URL不变（更新内容）
+                {{ t('ipfsUpload.keepOriginalUrl') }}
               </a-checkbox>
               <div class="mt-2 text-xs text-white/70">
-                选择此项将更新内容但保持原URL不变，取消选择将生成新URL
+                {{ t('ipfsUpload.keepOriginalUrlDesc') }}
               </div>
             </div>
             
@@ -577,7 +580,7 @@ defineOptions({
                 <template #icon>
                   <UploadOutlined />
                 </template>
-                {{ uploading ? '上传中...' : (isEditingUploadedJson ? '更新到IPFS' : '上传到IPFS') }}
+                {{ uploading ? t('ipfsUpload.uploading') : (isEditingUploadedJson ? t('ipfsUpload.update') : t('ipfsUpload.upload')) }}
               </a-button>
             </div>
           </div>
@@ -587,15 +590,15 @@ defineOptions({
             <div class="flex items-center gap-3 p-4 bg-[rgba(82,196,26,0.1)] rounded-xl border border-[rgba(82,196,26,0.2)]">
               <CheckCircleOutlined class="text-[#52c41a] text-xl" />
               <div>
-                <div class="text-sm font-medium text-[#52c41a]">上传成功！</div>
-                <div class="text-xs text-white/70 mt-1">您的文件已成功上传到IPFS</div>
+                <div class="text-sm font-medium text-[#52c41a]">{{ t('ipfsUpload.uploadSuccess') }}</div>
+                <div class="text-xs text-white/70 mt-1">{{ t('ipfsUpload.uploadSuccess') }}</div>
               </div>
             </div>
             
             <!-- IPFS链接 -->
             <div class="bg-white/5 rounded-xl p-4 border border-white/10">
               <div class="flex items-center gap-2 mb-2">
-                <span class="text-sm font-medium text-white/80">IPFS链接</span>
+                <span class="text-sm font-medium text-white/80">{{ t('ipfsUpload.title') }}</span>
               </div>
               <div class="flex items-center gap-2">
                 <div
@@ -609,7 +612,7 @@ defineOptions({
                   <template #icon>
                     <CopyOutlined />
                   </template>
-                  复制
+                  {{ t('common.copy') }}
                 </a-button>
                 <a-button
                   v-if="uploadedUrl.includes('mypinata.cloud')"
@@ -663,7 +666,7 @@ defineOptions({
                   <template #icon>
                     <EditOutlined />
                   </template>
-                  编辑并重新上传
+                  {{ t('ipfsUpload.editAndReupload') }}
                 </a-button>
               </div>
               <pre class="text-xs text-white/80 font-mono bg-white/5 rounded-lg p-4 border border-white/10 overflow-auto max-h-64">{{ JSON.stringify(uploadedJsonContent, null, 2) }}</pre>

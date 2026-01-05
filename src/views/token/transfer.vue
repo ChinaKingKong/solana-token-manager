@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { message } from 'ant-design-vue';
+import { useI18n } from 'vue-i18n';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import {
   getOrCreateAssociatedTokenAccount,
@@ -19,6 +20,8 @@ import {
   GlobalOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
+
+const { t } = useI18n();
 
 // 使用钱包Hook
 const walletContext = useWallet();
@@ -143,29 +146,29 @@ const fetchSenderBalance = async () => {
 // 转账代币
 const handleTransfer = async () => {
   if (!isFormValid.value) {
-    message.error('请检查表单信息是否正确');
+    message.error(t('transferToken.recipientAddressRequired'));
     return;
   }
 
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error('请先连接钱包');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   if (!walletState.value?.wallet) {
-    message.error('钱包未连接');
+    message.error(t('wallet.connectWallet'));
     return;
   }
 
   // 验证接收地址
   if (!isValidSolanaAddress(recipientAddress.value)) {
-    message.error('接收地址格式不正确');
+    message.error(t('transferToken.addressInvalid'));
     return;
   }
 
   // 检查余额
   if (parseFloat(transferAmount.value) > senderBalance.value) {
-    message.error('转账金额不能超过当前余额');
+    message.error(t('transferToken.insufficientBalance'));
     return;
   }
 
@@ -174,12 +177,12 @@ const handleTransfer = async () => {
   try {
     // 再次检查钱包状态（防止在操作过程中断开连接）
     if (!walletState.value?.connected || !walletState.value?.publicKey) {
-      message.error('钱包未连接，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
     if (!walletState.value?.wallet) {
-      message.error('钱包适配器未初始化，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
@@ -191,13 +194,13 @@ const handleTransfer = async () => {
 
     // 验证钱包适配器是否有效
     if (!wallet || typeof wallet.sendTransaction !== 'function') {
-      message.error('钱包适配器无效，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
     // 检查钱包适配器的连接状态
     if (wallet.connected === false || !wallet.publicKey) {
-      message.error('钱包未连接，请重新连接钱包');
+      message.error(t('wallet.connectWallet'));
       return;
     }
 
@@ -261,7 +264,7 @@ const handleTransfer = async () => {
     const signature = await wallet.sendTransaction(transaction, conn);
     await conn.confirmTransaction(signature, 'confirmed');
 
-    message.success(`成功转账 ${transferAmount.value} 代币到 ${formatAddress(recipientAddress.value)}!`);
+    message.success(t('transferToken.transferSuccess'));
 
     // 刷新余额和代币信息
     await fetchSenderBalance();
@@ -275,13 +278,13 @@ const handleTransfer = async () => {
     
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
-      message.warning('您已取消交易');
+      message.warning(t('transferToken.userCancelled') || t('createToken.userCancelled'));
     } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
-      message.error('钱包未连接，请重新连接钱包后重试');
+      message.error(t('wallet.connectWallet'));
     } else if (error.message?.includes('insufficient funds') || error.message?.includes('余额不足')) {
-      message.error('余额不足，无法完成转账');
+      message.error(t('transferToken.insufficientBalance'));
     } else {
-      message.error(`转账失败: ${error.message || '未知错误'}`);
+      message.error(`${t('transferToken.transferFailed')}: ${error.message || t('common.error')}`);
     }
   } finally {
     transferring.value = false;
