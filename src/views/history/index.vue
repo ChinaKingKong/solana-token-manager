@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
-import { useI18n } from 'vue-i18n';
-import { PublicKey } from '@solana/web3.js';
+import { useI18n } from 'vue-i18n'; 
 import { useWallet } from '../../hooks/useWallet';
 
 const { t } = useI18n();
@@ -249,9 +248,10 @@ const getTransactionType = (tx: any) => {
 };
 
 // 格式化地址
-const formatAddress = (address: string) => {
+const formatAddress = (address: string | number | null | undefined) => {
   if (!address) return '';
-  return `${address.slice(0, 6)}...${address.slice(-6)}`;
+  const addressStr = String(address);
+  return `${addressStr.slice(0, 12)}.....${addressStr.slice(-12)}`;
 };
 
 // 解析代币转账详情
@@ -320,13 +320,14 @@ const parseBurn = (instruction: any) => {
 };
 
 // 解析交易指令详情
-const parseInstructionDetails = (instruction: any, index: number, allAccounts: string[]) => {
+const parseInstructionDetails = (instruction: any, index: string | number, allAccounts: string[]) => {
+  const indexNum = typeof index === 'string' ? parseInt(index, 10) : index;
   const programId = typeof instruction.programId === 'string'
     ? instruction.programId
     : instruction.programId?.toString() || 'Unknown';
 
   let details: any = {
-    index: index + 1,
+    index: indexNum + 1,
     programId: formatAddress(programId),
     programName: getProgramName(programId)
   };
@@ -415,6 +416,26 @@ watch(() => walletState.value?.connected, (isConnected) => {
   } else {
     transactions.value = [];
     currentPage.value = 1;
+  }
+});
+
+// 监听钱包公钥变化（钱包切换）
+watch(() => walletState.value?.publicKey?.toBase58(), (newPublicKey, oldPublicKey) => {
+  // 当公钥变化且钱包已连接时，刷新交易历史
+  if (walletState.value?.connected) {
+    if (newPublicKey && oldPublicKey && newPublicKey !== oldPublicKey) {
+      // 钱包切换：清空列表并重新加载
+      transactions.value = [];
+      currentPage.value = 1;
+      fetchTransactionHistory();
+    } else if (newPublicKey && !oldPublicKey) {
+      // 新连接：加载交易历史
+      fetchTransactionHistory();
+    } else if (!newPublicKey && oldPublicKey) {
+      // 断开连接：清空列表
+      transactions.value = [];
+      currentPage.value = 1;
+    }
   }
 });
 
@@ -526,7 +547,7 @@ defineOptions({
               @click="viewTransactionDetail(tx.signature)">
               <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-3 mb-2">
+                  <div class="flex items-center gap-1 mb-2">
                     <component :is="getStatus(tx).icon" :class="`text-${getStatus(tx).color === 'error' ? 'red' : getStatus(tx).color === 'success' ? 'green' : 'blue'}-400`" />
                     <a-tag :color="getStatus(tx).color">
                       {{ getStatus(tx).text }}
@@ -676,7 +697,7 @@ defineOptions({
                 :key="index"
                 class="bg-white/5 rounded-xl p-4 border border-white/10 hover:border-[rgba(20,241,149,0.3)] transition-all duration-300">
                 <div class="flex items-center gap-3 mb-3 pb-3 border-b border-white/10">
-                  <span class="bg-gradient-solana text-dark-bg font-bold text-xs px-3 py-1 rounded-lg">#{{ index + 1 }}</span>
+                  <span class="bg-gradient-solana text-dark-bg font-bold text-xs px-3 py-1 rounded-lg">#{{ Number(index) + 1 }}</span>
                   <span class="text-sm font-semibold text-white/90">{{ parseInstructionDetails(instruction, index, []).type || t('transactionHistory.typeUnknown') }}</span>
                   <span class="ml-auto text-xs text-solana-green bg-solana-green/10 px-3 py-1 rounded-lg border border-solana-green/20">{{ parseInstructionDetails(instruction, index, []).programName }}</span>
                 </div>

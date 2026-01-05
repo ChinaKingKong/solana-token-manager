@@ -437,6 +437,26 @@ watch(() => walletState.value?.connected, (isConnected) => {
   }
 });
 
+// 监听钱包公钥变化（钱包切换）
+watch(() => walletState.value?.publicKey?.toBase58(), (newPublicKey, oldPublicKey) => {
+  // 当公钥变化且钱包已连接时，刷新代币列表
+  if (walletState.value?.connected) {
+    if (newPublicKey && oldPublicKey && newPublicKey !== oldPublicKey) {
+      // 钱包切换：清空列表并重新加载
+      tokens.value = [];
+      currentPage.value = 1;
+      fetchTokenList();
+    } else if (newPublicKey && !oldPublicKey) {
+      // 新连接：加载代币列表
+      fetchTokenList();
+    } else if (!newPublicKey && oldPublicKey) {
+      // 断开连接：清空列表
+      tokens.value = [];
+      currentPage.value = 1;
+    }
+  }
+});
+
 // 监听网络变化
 watch(() => network.value, (newNetwork, oldNetwork) => {
   if (oldNetwork && newNetwork !== oldNetwork) {
