@@ -627,7 +627,7 @@ defineOptions({
                     <div
                       class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0">
                       <div class="text-[11px] text-white/80 font-mono truncate flex-1">
-                        {{ token.balance.toFixed(token.decimals) }}
+                        {{ token.balance.toFixed(1) }}
                       </div> 
                     </div>
                   </div>
