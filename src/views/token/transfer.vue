@@ -336,6 +336,20 @@ watch(() => walletState.value?.connected, (isConnected) => {
   }
 });
 
+// 组件挂载时检查是否有从代币列表传递过来的 mint 地址
+onMounted(() => {
+  const savedMint = localStorage.getItem('transfer-token-mint');
+  if (savedMint) {
+    tokenMintAddress.value = savedMint;
+    // 清除 localStorage 中的值，避免下次进入页面时自动填充
+    localStorage.removeItem('transfer-token-mint');
+    // 如果钱包已连接，自动获取代币信息
+    if (walletState.value?.connected) {
+      fetchTokenInfo();
+    }
+  }
+});
+
 // 默认导出
 defineOptions({
   name: 'TransferToken',

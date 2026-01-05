@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { useI18n } from 'vue-i18n';
-import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined, PlusOutlined } from '@ant-design/icons-vue';
+import { ReloadOutlined, CopyOutlined, AppstoreOutlined, WalletOutlined, DollarCircleOutlined, PlusOutlined, SendOutlined, GlobalOutlined } from '@ant-design/icons-vue';
 import { PublicKey } from '@solana/web3.js';
 import { useWallet } from '../../hooks/useWallet';
 import { fetchOnChainMetadata } from '../../utils/metadata';
@@ -362,7 +362,7 @@ const formatAddress = (address: string) => {
 };
 
 // 复制地址
-const copyAddress = (address: string, type: string = '地址') => {
+const copyAddress = (address: string) => {
   navigator.clipboard.writeText(address)
     .then(() => {
       message.success(t('wallet.addressCopied'));
@@ -372,11 +372,14 @@ const copyAddress = (address: string, type: string = '地址') => {
     });
 };
 
-// 转账功能
+// 转账功能 - 跳转到转账页面
 const handleTransfer = (token: TokenData) => {
-  // 触发转账事件，传递代币信息
-  message.info(`转账功能开发中，代币: ${token.symbol || 'Unknown'}`);
-  // TODO: 导航到转账页面并传递代币信息
+  // 将代币 mint 地址存储到 localStorage，供转账页面使用
+  localStorage.setItem('transfer-token-mint', token.mint);
+  // 导航到转账页面
+  window.dispatchEvent(new CustomEvent('navigate-to', {
+    detail: { key: 'transfer-token' }
+  }));
 };
 
 // 在Solscan查看
@@ -627,7 +630,7 @@ defineOptions({
                     <span class="text-[11px] text-white/60 font-medium min-w-[35px]">Mint</span>
                     <div
                       class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0"
-                      @click="copyAddress(token.mint, t('tokenList.mintAddress'))">
+                      @click="copyAddress(token.mint)">
                       <code class="text-[11px] text-white/80 font-mono truncate flex-1">{{ formatAddress(token.mint)
                       }}</code>
                       <CopyOutlined class="text-[11px] shrink-0 text-white/60" />
@@ -637,7 +640,7 @@ defineOptions({
                     <span class="text-[11px] text-white/60 font-medium min-w-[35px]">ATA</span>
                     <div
                       class="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded cursor-pointer hover:bg-white/10 transition-colors flex-1 min-w-0"
-                      @click="copyAddress(token.ata, t('tokenList.ataAddress'))">
+                      @click="copyAddress(token.ata)">
                       <code class="text-[11px] text-white/80 font-mono truncate flex-1">{{ formatAddress(token.ata)
                       }}</code>
                       <CopyOutlined class="text-[11px] shrink-0 text-white/60" />
@@ -654,14 +657,14 @@ defineOptions({
                   @click="handleTransfer(token)"
                   class="flex items-center justify-center flex-1 px-3 py-1.5 text-xs font-medium rounded-full bg-[rgba(20,241,149,0.1)] border border-[rgba(20,241,149,0.2)] text-solana-green transition-all duration-300 ease-in-out hover:bg-[rgba(20,241,149,0.15)] hover:border-[rgba(20,241,149,0.3)] cursor-pointer"
                 >
-                  <span class="mr-1">📤</span>
+                  <SendOutlined class="mr-1" />
                   {{ t('tokenList.transfer') }}
                 </button>
                 <button
                   @click="viewOnSolscan(token.mint)"
                   class="flex items-center justify-center flex-1 px-3 py-1.5 text-xs font-medium rounded-full bg-[rgba(153,69,255,0.1)] border border-[rgba(153,69,255,0.2)] text-white transition-all duration-300 ease-in-out hover:bg-[rgba(153,69,255,0.15)] hover:border-[rgba(153,69,255,0.3)] cursor-pointer"
                 >
-                  <span class="mr-1">🔍</span>
+                  <GlobalOutlined class="mr-1" />
                   Solscan
                 </button>
               </div>
@@ -679,6 +682,7 @@ defineOptions({
           class="[&_.ant-pagination-item]:bg-white/10 [&_.ant-pagination-item]:border-white/20 [&_.ant-pagination-item]:text-white [&_.ant-pagination-item:hover]:border-solana-green [&_.ant-pagination-item-active]:bg-solana-green [&_.ant-pagination-item-active]:border-solana-green [&_.ant-pagination-prev]:text-white [&_.ant-pagination-next]:text-white [&_.ant-pagination-jump-prev]:text-white [&_.ant-pagination-jump-next]:text-white" />
       </div>
     </div>
+
   </div>
 </template>
 
@@ -797,4 +801,5 @@ defineOptions({
     margin-bottom: 8px;
   }
 }
+
 </style>
