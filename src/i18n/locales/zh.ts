@@ -476,6 +476,8 @@ export default {
     convertToIpfsFailed: '无法转换链接，CID格式不正确',
     convertToIpfsNotNeeded: '当前不是Pinata链接，无需转换',
     enterPinataApiKey: '请输入Pinata API密钥',
+    connectWalletFirst: '请先连接钱包',
+    connectWalletDesc: '连接钱包以设置代币元数据',
   },
   // Transaction History
   transactionHistory: {
