@@ -217,7 +217,8 @@ const submitMetadata = async () => {
       return;
     }
 
-    if (wallet.connected === false || !wallet.publicKey) {
+    // 验证钱包适配器是否有效（连接状态已在函数开始处检查）
+    if (!wallet || typeof wallet.sendTransaction !== 'function') {
       message.error(t('wallet.connectWallet'));
       return;
     }
@@ -351,11 +352,27 @@ const submitMetadata = async () => {
       // 继续尝试发送，因为某些情况下模拟可能失败但实际发送会成功
     }
     
+    // 在发送交易前再次验证钱包状态
+    if (!walletState.value?.connected || !walletState.value?.publicKey) {
+      message.error(t('wallet.connectWallet'));
+      return;
+    }
+
     // 发送交易
     let signature: string;
     try {
       signature = await wallet.sendTransaction(transaction, conn);
     } catch (sendError: any) {
+      // 如果错误是 WalletNotConnectedError，先检查钱包状态
+      if (sendError.message?.includes('WalletNotConnectedError') || sendError.message?.includes('not connected')) {
+        // 再次检查钱包状态
+        if (!walletState.value?.connected || !walletState.value?.publicKey) {
+          message.error(t('wallet.connectWallet'));
+          return;
+        }
+        // 如果钱包状态正常，可能是钱包适配器的问题，尝试其他方法
+      }
+      
       // 如果直接发送失败，尝试先签名再发送
       if (typeof wallet.signTransaction === 'function') {
         try {
@@ -387,21 +404,33 @@ const submitMetadata = async () => {
     message.success(t('setMetadata.setSuccess'));
   } catch (error: any) {
     // 处理特定错误
-    if (error.message?.includes('User rejected') || error.message?.includes('用户取消') || error.message?.includes('rejected')) {
+    let errorMessage = t('common.error');
+    
+    if (error.message) {
+      errorMessage = error.message;
+    } else if (error.toString && error.toString() !== '[object Object]') {
+      errorMessage = error.toString();
+    } else if (error.name) {
+      errorMessage = error.name;
+    }
+    
+    if (errorMessage.includes('User rejected') || errorMessage.includes('用户取消') || errorMessage.includes('rejected')) {
       message.warning(t('setMetadata.userCancelled') || t('createToken.userCancelled'));
-    } else if (error.message?.includes('Insufficient funds') || error.message?.includes('insufficient funds')) {
+    } else if (errorMessage.includes('WalletNotConnectedError') || errorMessage.includes('not connected') || errorMessage.includes('Wallet not connected')) {
+      message.error(t('wallet.connectWallet'));
+    } else if (errorMessage.includes('Insufficient funds') || errorMessage.includes('insufficient funds')) {
       message.error(t('setMetadata.insufficientFunds'));
-    } else if (error.message?.includes('InvalidAccountData') || error.message?.includes('AccountNotFound')) {
+    } else if (errorMessage.includes('InvalidAccountData') || errorMessage.includes('AccountNotFound')) {
       message.error(t('setMetadata.accountNotFound'));
-    } else if (error.message?.includes('0x1') || error.message?.includes('ConstraintRaw') || error.message?.includes('constraint')) {
+    } else if (errorMessage.includes('0x1') || errorMessage.includes('ConstraintRaw') || errorMessage.includes('constraint')) {
       message.error(t('setMetadata.permissionDenied'));
-    } else if (error.message?.includes('0x0') || error.message?.includes('Insufficient')) {
+    } else if (errorMessage.includes('0x0') || errorMessage.includes('Insufficient')) {
       message.error(t('setMetadata.insufficientFunds'));
-    } else if (error.message?.includes('Simulation failed') || error.message?.includes('simulation failed')) {
-      message.error(error.message);
-    } else if (error.name === 'WalletSendTransactionError' || error.message?.includes('Unexpected error')) {
+    } else if (errorMessage.includes('Simulation failed') || errorMessage.includes('simulation failed')) {
+      message.error(errorMessage);
+    } else if (error.name === 'WalletSendTransactionError' || errorMessage.includes('Unexpected error')) {
       // 处理 WalletSendTransactionError，提供更详细的错误提示
-      const detailedError = error.message || error.toString() || '交易发送失败';
+      const detailedError = errorMessage || error.toString() || '交易发送失败';
       message.error(`${t('setMetadata.setFailed')}: ${detailedError}`);
     } else if (error.logs && Array.isArray(error.logs)) {
       // 尝试从日志中提取错误信息
@@ -409,23 +438,10 @@ const submitMetadata = async () => {
       if (errorLog) {
         message.error(`${t('setMetadata.setFailed')}: ${errorLog}`);
       } else {
-        const errorMsg = error.message || error.toString() || t('common.error');
-        message.error(`${t('setMetadata.setFailed')}: ${errorMsg}`);
+        message.error(`${t('setMetadata.setFailed')}: ${errorMessage}`);
       }
     } else {
-      // 尝试获取更详细的错误信息
-      let errorMsg = '';
-      if (error.message) {
-        errorMsg = error.message;
-      } else if (error.toString && error.toString() !== '[object Object]') {
-        errorMsg = error.toString();
-      } else if (error.name) {
-        errorMsg = error.name;
-      } else {
-        errorMsg = t('common.error') || '未知错误';
-      }
-      
-      message.error(`${t('setMetadata.setFailed')}: ${errorMsg}`);
+      message.error(`${t('setMetadata.setFailed')}: ${errorMessage}`);
     }
   } finally {
     processing.value = false;

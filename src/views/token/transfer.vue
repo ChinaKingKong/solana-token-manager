@@ -198,8 +198,8 @@ const handleTransfer = async () => {
       return;
     }
 
-    // 检查钱包适配器的连接状态
-    if (wallet.connected === false || !wallet.publicKey) {
+    // 验证钱包适配器是否有效
+    if (!wallet || typeof wallet.sendTransaction !== 'function') {
       message.error(t('wallet.connectWallet'));
       return;
     }
@@ -256,13 +256,62 @@ const handleTransfer = async () => {
     );
 
     // 获取最近的区块哈希
-    const { blockhash } = await conn.getLatestBlockhash();
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('finalized');
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = senderPubkey;
 
-    // 发送并确认交易
-    const signature = await wallet.sendTransaction(transaction, conn);
-    await conn.confirmTransaction(signature, 'confirmed');
+    // 在发送交易前再次验证钱包状态
+    if (!walletState.value?.connected || !walletState.value?.publicKey) {
+      message.error(t('wallet.connectWallet'));
+      return;
+    }
+
+    // 尝试发送交易
+    let signature: string;
+    
+    try {
+      // 方法1: 直接发送（标准方式）
+      signature = await wallet.sendTransaction(transaction, conn);
+    } catch (sendError: any) {
+      // 如果错误是 WalletNotConnectedError，先检查钱包状态
+      if (sendError.message?.includes('WalletNotConnectedError') || sendError.message?.includes('not connected')) {
+        // 再次检查钱包状态
+        if (!walletState.value?.connected || !walletState.value?.publicKey) {
+          message.error(t('wallet.connectWallet'));
+          return;
+        }
+        // 如果钱包状态正常，可能是钱包适配器的问题，尝试其他方法
+      }
+      
+      // 如果直接发送失败，尝试先签名再发送
+      // 检查钱包是否支持 signTransaction
+      if (typeof wallet.signTransaction === 'function') {
+        try {
+          // 方法2: 先签名再发送
+          const signedTransaction = await wallet.signTransaction(transaction);
+          signature = await conn.sendRawTransaction(signedTransaction.serialize(), {
+            skipPreflight: false,
+            maxRetries: 3,
+          });
+        } catch (signError: any) {
+          throw sendError; // 抛出原始错误
+        }
+      } else {
+        // 钱包不支持 signTransaction，抛出原始错误
+        throw sendError;
+      }
+    }
+
+    // 等待确认
+    const confirmation = await conn.confirmTransaction({
+      signature,
+      blockhash,
+      lastValidBlockHeight,
+    }, 'confirmed');
+
+    if (confirmation.value.err) {
+      throw new Error(`交易确认失败: ${JSON.stringify(confirmation.value.err)}`);
+    }
 
     message.success(t('transferToken.transferSuccess'));
 
@@ -276,14 +325,22 @@ const handleTransfer = async () => {
   } catch (error: any) {
     
     // 改进错误提示
-    if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
+    let errorMessage = t('common.error');
+    
+    if (error.message) {
+      errorMessage = error.message;
+    } else if (error.toString && error.toString() !== '[object Object]') {
+      errorMessage = error.toString();
+    }
+    
+    if (errorMessage.includes('User rejected') || errorMessage.includes('rejected')) {
       message.warning(t('transferToken.userCancelled') || t('createToken.userCancelled'));
-    } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
+    } else if (errorMessage.includes('WalletNotConnectedError') || errorMessage.includes('not connected') || errorMessage.includes('Wallet not connected')) {
       message.error(t('wallet.connectWallet'));
-    } else if (error.message?.includes('insufficient funds') || error.message?.includes('Insufficient funds')) {
+    } else if (errorMessage.includes('insufficient funds') || errorMessage.includes('Insufficient funds')) {
       message.error(t('transferToken.insufficientBalance'));
     } else {
-      message.error(`${t('transferToken.transferFailed')}: ${error.message || t('common.error')}`);
+      message.error(`${t('transferToken.transferFailed')}: ${errorMessage}`);
     }
   } finally {
     transferring.value = false;

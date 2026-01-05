@@ -214,8 +214,8 @@ const executeBurn = async () => {
       return;
     }
 
-    // 检查钱包适配器的连接状态
-    if (wallet.connected === false || !wallet.publicKey) {
+    // 验证钱包适配器是否有效（连接状态已在函数开始处检查）
+    if (!wallet || typeof wallet.sendTransaction !== 'function') {
       message.error(t('wallet.connectWallet'));
       return;
     }
@@ -272,7 +272,7 @@ const executeBurn = async () => {
     // 改进错误提示
     if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
       message.warning(t('burnToken.userCancelled') || t('createToken.userCancelled'));
-    } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected')) {
+    } else if (error.message?.includes('WalletNotConnectedError') || error.message?.includes('not connected') || error.message?.includes('Wallet not connected')) {
       message.error(t('wallet.connectWallet'));
     } else if (error.message?.includes('insufficient funds') || error.message?.includes('Insufficient funds')) {
       message.error(t('burnToken.insufficientBalance'));

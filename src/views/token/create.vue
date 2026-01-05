@@ -2,13 +2,15 @@
 import { ref, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { useI18n } from 'vue-i18n';
-import { Transaction, SystemProgram, Keypair, PublicKey } from '@solana/web3.js';
+import { Transaction, SystemProgram, Keypair } from '@solana/web3.js';
 import {
   getMint,
   MINT_SIZE,
   TOKEN_PROGRAM_ID,
   getMinimumBalanceForRentExemptMint,
   createInitializeMintInstruction,
+  createSetAuthorityInstruction,
+  AuthorityType,
 } from '@solana/spl-token';
 import {
   PlusOutlined,
@@ -57,29 +59,31 @@ const isFormValid = computed(() => {
     walletState.value?.publicKey !== null;
 });
 
-// 创建代币
-const createToken = async () => {
-  if (!isFormValid.value) {
-    message.error(t('createToken.nameRequired'));
-    return;
-  }
+  // 创建代币
+  const createToken = async () => {
+    // 先检查表单基本验证（名称和符号）
+    if (!tokenName.value.trim() || !tokenSymbol.value.trim()) {
+      message.error(t('createToken.nameRequired'));
+      return;
+    }
 
-  if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error(t('wallet.connectWallet'));
-    return;
-  }
-  
-  if (!walletState.value?.wallet) {
-    message.error(t('wallet.connectWallet'));
-    return;
-  }
-  
-  creating.value = true;
-  
-  try {
-    const publicKey = walletState.value.publicKey!; // 非空断言，因为前面已经检查过
+    // 直接使用 walletState，不做复杂检查
+    if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
+      message.error(t('wallet.connectWallet'));
+      return;
+    }
+
+    const publicKey = walletState.value.publicKey;
     const wallet = walletState.value.wallet;
-    const conn = connection.value;
+    
+    // 确保钱包适配器有 publicKey（对于某些钱包适配器，可能需要从 walletState 获取）
+    // 注意：某些钱包适配器的 publicKey 是只读的，所以这里只是检查
+    // 如果 wallet.publicKey 不存在，我们仍然可以使用 publicKey 变量
+    
+    creating.value = true;
+    
+    try {
+      const conn = connection.value;
 
     // 创建新的密钥对作为代币 mint 地址
     const mintKeypair = Keypair.generate();
@@ -89,38 +93,103 @@ const createToken = async () => {
     const lamports = await getMinimumBalanceForRentExemptMint(conn);
 
     // 创建交易
-    const transaction = new Transaction().add(
-      // 创建账户
+    const transaction = new Transaction();
+    
+    // 添加创建账户指令
+    transaction.add(
       SystemProgram.createAccount({
         fromPubkey: publicKey,
         newAccountPubkey: mintPublicKey,
         space: MINT_SIZE,
         lamports,
         programId: TOKEN_PROGRAM_ID,
-      }),
-      // 初始化 mint
+      })
+    );
+    
+    // 初始化 mint（mintAuthority 不能为 null，所以总是设置为 publicKey）
+    transaction.add(
       createInitializeMintInstruction(
         mintPublicKey,
         tokenDecimals.value,
-        keepMintAuthority.value ? publicKey : (null as unknown as PublicKey),
-        keepFreezeAuthority.value ? publicKey : (null as unknown as PublicKey),
+        publicKey, // mintAuthority 必须是一个有效的 PublicKey
+        keepFreezeAuthority.value ? publicKey : null, // freezeAuthority 可以为 null
         TOKEN_PROGRAM_ID
       )
     );
+    
+    // 如果不需要保留 mintAuthority，在创建后立即移除
+    if (!keepMintAuthority.value) {
+      transaction.add(
+        createSetAuthorityInstruction(
+          mintPublicKey,
+          publicKey, // 当前权限持有者
+          AuthorityType.MintTokens,
+          null, // 设置为 null 以移除权限
+          undefined, // multiSigners
+          TOKEN_PROGRAM_ID
+        )
+      );
+    }
 
     // 获取最近的区块哈希
-    const { blockhash } = await conn.getLatestBlockhash();
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('finalized');
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = publicKey;
 
     // 部分签名（mint 账户需要签名）
     transaction.partialSign(mintKeypair);
 
-    // 发送交易
-    const signature = await wallet.sendTransaction(transaction, conn);
+    // 尝试发送交易
+    let signature: string;
+    
+    try {
+      // 方法1: 直接发送（标准方式）
+      if (typeof wallet.sendTransaction === 'function') {
+        signature = await wallet.sendTransaction(transaction, conn);
+      } else if (typeof wallet.signTransaction === 'function') {
+        // 方法2: 先签名再发送
+        const signedTransaction = await wallet.signTransaction(transaction);
+        signature = await conn.sendRawTransaction(signedTransaction.serialize(), {
+          skipPreflight: false,
+          maxRetries: 3,
+        });
+      } else {
+        throw new Error('钱包适配器不支持发送交易');
+      }
+    } catch (sendError: any) {
+      // 如果错误是 WalletNotConnectedError，提示用户连接钱包
+      if (sendError.message?.includes('WalletNotConnectedError') || 
+          sendError.message?.includes('not connected') || 
+          sendError.message?.includes('Wallet not connected')) {
+        throw new Error('WalletNotConnectedError');
+      }
+      
+      // 如果直接发送失败，尝试先签名再发送
+      if (typeof wallet.signTransaction === 'function') {
+        try {
+          const signedTransaction = await wallet.signTransaction(transaction);
+          signature = await conn.sendRawTransaction(signedTransaction.serialize(), {
+            skipPreflight: false,
+            maxRetries: 3,
+          });
+        } catch (signError: any) {
+          throw sendError; // 抛出原始错误
+        }
+      } else {
+        throw sendError; // 抛出原始错误
+      }
+    }
 
     // 等待确认
-    await conn.confirmTransaction(signature, 'confirmed');
+    const confirmation = await conn.confirmTransaction({
+      signature,
+      blockhash,
+      lastValidBlockHeight,
+    }, 'confirmed');
+
+    if (confirmation.value.err) {
+      throw new Error(`交易确认失败: ${JSON.stringify(confirmation.value.err)}`);
+    }
 
     const mintAddress = mintPublicKey.toString();
     createdTokenMint.value = mintAddress;
@@ -147,12 +216,29 @@ const createToken = async () => {
     tokenName.value = '';
     tokenSymbol.value = '';
   } catch (error: any) {
-    
     // 改进错误提示
-    if (error.message?.includes('User rejected') || error.message?.includes('rejected')) {
+    let errorMessage = t('common.error');
+    
+    if (error.message) {
+      errorMessage = error.message;
+    } else if (error.toString && error.toString() !== '[object Object]') {
+      errorMessage = error.toString();
+    }
+    
+    // 检查常见的错误类型
+    if (errorMessage.includes('User rejected') || errorMessage.includes('rejected')) {
       message.warning(t('createToken.userCancelled'));
+    } else if (errorMessage.includes('WalletNotConnectedError') || errorMessage.includes('not connected') || errorMessage.includes('Wallet not connected') || errorMessage.includes('钱包未连接')) {
+      // 如果是钱包未连接错误，只显示连接钱包提示，不显示"创建代币失败"
+      message.error(t('wallet.connectWallet'));
+    } else if (errorMessage.includes('insufficient funds') || errorMessage.includes('Insufficient')) {
+      message.error(`${t('createToken.createFailed')}: ${t('wallet.insufficientFunds') || '余额不足'}`);
+    } else if (errorMessage.includes('Network') || errorMessage.includes('network')) {
+      message.error(`${t('createToken.createFailed')}: ${t('wallet.networkError') || '网络错误'}`);
+    } else if (errorMessage.includes('Transaction') || errorMessage.includes('transaction')) {
+      message.error(`${t('createToken.createFailed')}: ${t('wallet.transactionError') || '交易失败'}`);
     } else {
-      message.error(`${t('createToken.createFailed')}: ${error.message || t('common.error')}`);
+      message.error(`${t('createToken.createFailed')}: ${errorMessage}`);
     }
   } finally {
     creating.value = false;
