@@ -29,17 +29,15 @@ const mintOptions = computed(() => {
   }));
 });
 
-// 过滤选项函数 - 使用 computed 来避免在渲染函数外调用
-const filterMintOptions = computed(() => {
-  return (input: string, option: any) => {
-    if (!input) return true;
-    const searchText = input.toLowerCase();
-    return (
-      option.value?.toLowerCase().includes(searchText) ||
-      (option.label && option.label.toLowerCase().includes(searchText))
-    );
-  };
-});
+// 过滤选项函数
+const filterMintOptions = (input: string, option: any) => {
+  if (!input) return true;
+  const searchText = input.toLowerCase();
+  return (
+    option.value?.toLowerCase().includes(searchText) ||
+    (option.label && option.label.toLowerCase().includes(searchText))
+  );
+};
 
 // 验证Solana地址格式
 const isValidSolanaAddress = (address: string): boolean => {
@@ -63,13 +61,17 @@ const inputValue = computed({
       v-model:value="inputValue"
       size="large"
       :options="mintOptions"
-      :filter-option="filterMintOptions.value"
+      :filter-option="filterMintOptions"
       class="w-full"
       :class="{ '!border-solana-green': inputValue && isValidSolanaAddress(inputValue) }"
       :dropdown-style="{ background: 'rgba(26, 34, 53, 0.95)', border: '1px solid rgba(255, 255, 255, 0.1)' }"
+      allow-clear
     >
-      <template #getInputElement>
+      <template #getInputElement="{ value, onChange }">
         <a-input
+          :value="value"
+          @input="onChange"
+          @clear="() => onChange('')"
           :placeholder="placeholder || t('tokenList.selectMintAddressPlaceholder')"
           allow-clear
         >
@@ -134,7 +136,9 @@ const inputValue = computed({
 
 /* 清除图标样式 - 圆角处理 */
 :deep(.ant-input-clear-icon),
-:deep(.ant-input-affix-wrapper .ant-input-clear-icon) {
+:deep(.ant-input-affix-wrapper .ant-input-clear-icon),
+:deep(.ant-auto-complete .ant-input-clear-icon),
+:deep(.ant-auto-complete .ant-input-affix-wrapper .ant-input-clear-icon) {
   background: transparent !important;
   background-color: transparent !important;
   display: flex !important;
@@ -144,21 +148,29 @@ const inputValue = computed({
   width: 20px !important;
   height: 20px !important;
   transition: all 0.2s ease !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 10 !important;
 }
 
 :deep(.ant-input-clear-icon:hover),
-:deep(.ant-input-affix-wrapper .ant-input-clear-icon:hover) {
+:deep(.ant-input-affix-wrapper .ant-input-clear-icon:hover),
+:deep(.ant-auto-complete .ant-input-clear-icon:hover),
+:deep(.ant-auto-complete .ant-input-affix-wrapper .ant-input-clear-icon:hover) {
   background-color: rgba(239, 68, 68, 0.1) !important;
 }
 
 :deep(.ant-input-clear-icon .anticon),
-:deep(.ant-input-affix-wrapper .ant-input-clear-icon .anticon) {
+:deep(.ant-input-affix-wrapper .ant-input-clear-icon .anticon),
+:deep(.ant-auto-complete .ant-input-clear-icon .anticon),
+:deep(.ant-auto-complete .ant-input-affix-wrapper .ant-input-clear-icon .anticon) {
   border-radius: 50% !important;
   width: 16px !important;
   height: 16px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  color: #ef4444 !important;
 }
 
 /* AutoComplete 下拉选项样式 */
