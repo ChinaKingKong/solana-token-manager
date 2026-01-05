@@ -591,8 +591,10 @@ defineOptions({
       width="58%"
       :footer="null"
       class="transaction-detail-modal"
+      :wrap-class-name="'transaction-detail-modal-wrap'"
+      :get-container="false"
     >
-      <div v-if="selectedTransaction" class="space-y-6">
+      <div v-if="selectedTransaction" class="transaction-detail-content space-y-6">
         <!-- 基本信息 -->
         <div class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border border-white/10 rounded-2xl p-6 overflow-visible transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]">
           <div class="absolute top-0 left-0 right-0 bottom-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
@@ -857,21 +859,50 @@ defineOptions({
 }
 
 /* 模态框样式 */
+:deep(.transaction-detail-modal-wrap) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10px !important;
+}
+
+:deep(.transaction-detail-modal-wrap .ant-modal) {
+  top: 0px !important;
+  margin: 0 !important;
+  padding-bottom: 10px !important;
+}
+
+:deep(.transaction-detail-modal .ant-modal) {
+  top: 0px !important;
+  margin: 0 !important;
+  padding-bottom: 10px !important;
+}
+
 :deep(.transaction-detail-modal .ant-modal-content) {
   background: linear-gradient(to bottom right, rgba(26, 34, 53, 0.95), rgba(11, 19, 43, 0.95)) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   color: rgba(255, 255, 255, 0.9) !important;
-  max-height: 90vh;
+  height: calc(100vh - 20px) !important;
+  max-height: calc(100vh - 20px) !important;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   backdrop-filter: blur(20px);
+}
+
+:deep(.transaction-detail-modal .ant-modal-header) {
+  flex-shrink: 0;
+  padding: 16px 24px !important;
 }
 
 :deep(.transaction-detail-modal .ant-modal-body) {
   background: transparent !important;
   color: rgba(255, 255, 255, 0.9) !important;
   padding: 24px !important;
-  max-height: calc(90vh - 100px);
+  flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 :deep(.transaction-detail-modal .ant-modal-header) {
@@ -1480,5 +1511,20 @@ defineOptions({
   .detail-action-btn {
     width: 100%;
   }
+}
+
+</style>
+
+<style>
+/* 全局样式 - 确保模态框位置和高度生效 */
+.transaction-detail-modal-wrap .ant-modal {
+  top: 0px !important;
+  margin: 0 !important;
+  padding-bottom: 10px !important;
+}
+
+.transaction-detail-modal-wrap .ant-modal-content {
+  height: calc(100vh - 20px) !important;
+  max-height: calc(100vh - 20px) !important;
 }
 </style>

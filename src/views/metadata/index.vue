@@ -499,7 +499,7 @@ defineOptions({
         <div class="mb-6 animate-bounce">
           <WalletOutlined class="text-6xl text-white/30" />
         </div>
-        <h3 class="text-2xl font-bold text-white mb-2">{{ t('wallet.connectWallet') }}</h3>
+        <h3 class="text-2xl font-bold text-white mb-2">{{ t('setMetadata.connectWalletFirst') }}</h3>
         <p class="text-white/60">{{ t('setMetadata.title') }}</p>
       </div>
     </div>

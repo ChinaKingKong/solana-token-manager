@@ -115,6 +115,8 @@ export default {
     selectMintAddressPlaceholder: 'Please select or enter token mint address',
     noSavedMints: 'No saved mint addresses',
     savedMints: 'Saved Mint Addresses',
+    connectWalletFirst: 'Please connect wallet first',
+    connectWalletDesc: 'Connect wallet to view token list',
   },
   // Create Token
   createToken: {
@@ -152,6 +154,8 @@ export default {
     keepFreezeAuthorityDesc: 'If you keep freeze authority, you can freeze any token account later',
     successMessage: 'Your token has been successfully created, please keep the following information safe',
     continue: 'Continue Setup',
+    connectWalletFirst: 'Please connect wallet first',
+    connectWalletDesc: 'Connect wallet to create token',
   },
   // Mint Token
   mintToken: {
@@ -184,6 +188,8 @@ export default {
     targetWalletAddressDesc: 'Tokens will be minted to the specified wallet address',
     maxDecimals: 'Supports up to {decimals} decimal places',
     mintTip: 'Minting Tips',
+    connectWalletFirst: 'Please connect wallet first',
+    connectWalletDesc: 'Connect wallet to mint tokens',
     mintTip1: 'Only addresses with mint authority (Mint Authority) can mint tokens',
     mintTip2: 'Minted tokens will be sent to the associated token account (ATA) of the specified wallet',
     mintTip3: 'If the target account does not exist, the system will automatically create it (requires payment of account creation fee)',
@@ -477,6 +483,8 @@ export default {
     convertToIpfsFailed: 'Unable to convert link, CID format is incorrect',
     convertToIpfsNotNeeded: 'Current link is not a Pinata link, no conversion needed',
     enterPinataApiKey: 'Please enter Pinata API key',
+    connectWalletFirst: 'Please connect wallet first',
+    connectWalletDesc: 'Connect wallet to set token metadata',
   },
   // Transaction History
   transactionHistory: {

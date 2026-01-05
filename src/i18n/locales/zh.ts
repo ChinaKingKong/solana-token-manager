@@ -115,6 +115,8 @@ export default {
     selectMintAddressPlaceholder: '请选择或输入代币Mint地址',
     noSavedMints: '暂无保存的Mint地址',
     savedMints: '已保存的Mint地址',
+    connectWalletFirst: '请先连接钱包',
+    connectWalletDesc: '连接钱包后即可查看代币列表',
   },
   // Create Token
   createToken: {
@@ -152,6 +154,8 @@ export default {
     keepFreezeAuthorityDesc: '如果保留冻结权限，您可以在之后冻结任何代币账户',
     successMessage: '您的代币已成功创建，请妥善保存以下信息',
     continue: '继续设置',
+    connectWalletFirst: '请先连接钱包',
+    connectWalletDesc: '连接钱包后即可创建代币',
   },
   // Mint Token
   mintToken: {
@@ -184,6 +188,8 @@ export default {
     targetWalletAddressDesc: '代币将铸造到指定的钱包地址',
     maxDecimals: '最多支持 {decimals} 位小数',
     mintTip: '铸造提示',
+    connectWalletFirst: '请先连接钱包',
+    connectWalletDesc: '连接钱包后即可铸造代币',
     mintTip1: '只有拥有铸币权限(Mint Authority)的地址才能铸造代币',
     mintTip2: '铸造的代币将发送到指定钱包的关联代币账户(ATA)',
     mintTip3: '如果目标账户不存在，系统会自动创建（需要支付账户创建费用）',
@@ -406,6 +412,8 @@ export default {
     enterPinataSecretKey: '输入你的Pinata Secret Key',
     validateApiKey: '验证API密钥',
     pinataConfig: 'Pinata配置',
+    connectWalletFirst: '请先连接钱包',
+    connectWalletDesc: '连接钱包后即可设置代币元数据',
   },
   // Set Metadata
   setMetadata: {

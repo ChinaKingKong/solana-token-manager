@@ -1,13 +1,13 @@
 {
-  "name": "Test5",
-  "symbol": "T5",
-  "description": "Test5 Token on Solana",
-  "image": "https://youke3.picui.cn/s1/2026/01/05/695b8828b2b24.jpg",
+  "name": "Test6",
+  "symbol": "T6",
+  "description": "Test6 Token on Solana",
+  "image": "https://youke3.picui.cn/s1/2026/01/05/695b8cdbc5461.jpeg",
   "external_url": "https://www.solana.io",
   "attributes": [
     {
       "trait_type": "Type",
-      "value": "Test5 Token"
+      "value": "Test6 Token"
     },
     {
       "trait_type": "Network",
