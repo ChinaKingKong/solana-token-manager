@@ -63,7 +63,17 @@ const handleSelectWallet = async (walletAdapter: any) => {
     await connectWallet(walletAdapter);
     message.success(`${t('wallet.walletConnected')} ${walletAdapter.name}`);
   } catch (error: any) {
-    message.error(`${t('wallet.connectFailed')}: ${error.message || t('common.error')}`);
+    // 如果错误信息包含"请检查并安装"，直接显示错误信息
+    if (error.message && error.message.includes('请检查并安装')) {
+      message.error(error.message);
+    } else if (error.message && error.message !== '错误' && error.message !== 'Error' && error.message.trim() !== '') {
+      // 如果有具体的错误信息且不是"错误"，直接显示
+      message.error(error.message);
+    } else {
+      // 否则显示友好的提示
+      const walletName = walletAdapter?.name || '钱包';
+      message.error(`请检查并安装${walletName}`);
+    }
   }
 };
 

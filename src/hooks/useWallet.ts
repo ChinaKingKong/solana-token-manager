@@ -398,7 +398,8 @@ export function useWalletProvider() {
       wallet.value = walletAdapter;
 
       if (!walletAdapter.publicKey) {
-        throw new Error('钱包公钥为空');
+        const walletName = walletAdapter.name || '钱包';
+        throw new Error(`请检查并安装${walletName}`);
       }
 
       publicKey.value = walletAdapter.publicKey;
@@ -422,7 +423,31 @@ export function useWalletProvider() {
       await fetchBalance();
 
       return true;
-    } catch (error) {
+    } catch (error: any) {
+      // 处理 Coinbase 钱包和其他钱包的错误，提供更友好的错误信息
+      const walletName = walletAdapter?.name || '钱包';
+      
+      // 如果错误信息为空或只是"错误"，提供更友好的提示
+      if (!error.message || error.message === '错误' || error.message === 'Error' || error.message.trim() === '') {
+        throw new Error(`请检查并安装${walletName}`);
+      }
+      
+      // 如果错误信息包含常见的连接失败关键词，提供更友好的提示
+      if (error.message.includes('not installed') || 
+          error.message.includes('未安装') ||
+          error.message.includes('not found') ||
+          error.message.includes('找不到') ||
+          error.message.includes('extension') ||
+          error.message.includes('扩展')) {
+        throw new Error(`请检查并安装${walletName}`);
+      }
+      
+      // 如果错误信息包含"请检查并安装"，直接抛出
+      if (error.message.includes('请检查并安装')) {
+        throw error;
+      }
+      
+      // 其他错误，保持原样抛出
       throw error;
     } finally {
       connecting.value = false;
