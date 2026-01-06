@@ -3,7 +3,8 @@ import { ref, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { useI18n } from 'vue-i18n';
 import { useWallet } from '../../hooks/useWallet';
-import { WalletOutlined, ReloadOutlined, CheckCircleOutlined, CopyOutlined, GiftOutlined } from '@ant-design/icons-vue';
+import WalletSelectorModal from '../../components/WalletSelectorModal.vue';
+import { ReloadOutlined, CheckCircleOutlined, CopyOutlined, GiftOutlined } from '@ant-design/icons-vue';
 import { Connection } from '@solana/web3.js';
 
 const { t } = useI18n();
@@ -20,12 +21,8 @@ const lastRequestTime = ref<Date | null>(null);
 const requestCount = ref(0);
 
 
-// 检查是否可以请求
+// 检查是否可以请求（移除钱包连接检查，允许未连接时查看页面）
 const canRequest = computed(() => {
-  if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    return false;
-  }
-  
   // 检查网络是否为测试网
   if (network.value !== 'devnet') {
     return false;
@@ -41,6 +38,9 @@ const canRequest = computed(() => {
   
   return true;
 });
+
+// 钱包选择器
+const showWalletSelector = ref(false);
 
 // 获取冷却时间剩余
 const cooldownRemaining = computed(() => {
@@ -65,11 +65,13 @@ const requestTestSol = async () => {
     return;
   }
 
+  // 检查钱包连接，如果未连接则弹出连接钱包弹框
+  if (!walletState.value?.connected || !walletState.value?.publicKey) {
+    showWalletSelector.value = true;
+    return;
+  }
+
   if (!canRequest.value) {
-    if (!walletState.value?.connected || !walletState.value?.publicKey) {
-      message.error(t('faucet.connectWalletFirst'));
-      return;
-    }
     if (cooldownRemaining.value) {
       message.warning(t('faucet.cooldownMessage', cooldownRemaining.value));
       return;
@@ -269,22 +271,11 @@ defineOptions({
 
 <template>
   <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] min-h-full flex flex-col">
-    <!-- 未连接钱包提示 -->
-    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px] flex-1">
-      <div class="text-center">
-        <div class="mb-6 animate-bounce">
-          <WalletOutlined class="text-6xl text-white/30" />
-        </div>
-        <h3 class="text-2xl font-bold text-white mb-2">{{ t('faucet.connectWalletFirst') }}</h3>
-        <p class="text-white/60">{{ t('faucet.connectWalletDesc') }}</p>
-      </div>
-    </div>
-
     <!-- 非测试网提示 -->
-    <div v-else-if="network !== 'devnet'" class="flex items-center justify-center min-h-[400px] flex-1">
+    <div v-if="network !== 'devnet'" class="flex items-center justify-center min-h-[400px] flex-1">
       <div class="text-center">
         <div class="mb-6 animate-bounce">
-          <WalletOutlined class="text-6xl text-white/30" />
+          <GiftOutlined class="text-6xl text-white/30" />
         </div>
         <h3 class="text-2xl font-bold text-white mb-2">{{ t('faucet.devnetOnly') }}</h3>
         <p class="text-white/60">{{ t('faucet.switchToDevnet') }}</p>
@@ -404,6 +395,24 @@ defineOptions({
         </div>
       </div>
     </div>
+
+    <!-- 钱包选择器模态框 -->
+    <WalletSelectorModal v-model:open="showWalletSelector" />
   </div>
 </template>
+
+<style scoped>
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+</style>
 

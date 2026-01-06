@@ -18,11 +18,11 @@ import {
   CheckCircleOutlined,
   InfoCircleOutlined,
   GlobalOutlined,
-  WalletOutlined,
   ToolOutlined,
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
 import { addTokenMint } from '../../composables/useTokenMints';
+import WalletSelectorModal from '../../components/WalletSelectorModal.vue';
 
 const { t } = useI18n();
 
@@ -49,15 +49,16 @@ const createdTokenInfo = ref<{
   freezeAuthority: string | null;
 } | null>(null);
 
-// 验证函数
+// 验证函数（移除钱包连接检查，允许未连接时查看页面）
 const isFormValid = computed(() => {
   return tokenName.value.trim() !== '' &&
     tokenSymbol.value.trim() !== '' &&
     tokenDecimals.value >= 0 &&
-         tokenDecimals.value <= 9 && 
-    walletState.value?.connected &&
-    walletState.value?.publicKey !== null;
+    tokenDecimals.value <= 9;
 });
+
+// 钱包选择器
+const showWalletSelector = ref(false);
 
   // 创建代币
   const createToken = async () => {
@@ -67,11 +68,9 @@ const isFormValid = computed(() => {
       return;
     }
 
-    // 放宽检查：只需要 connected 和 publicKey，不强制要求 wallet 实例
-    // 因为钱包可能在页面刷新后重连，但适配器实例可能不同步
-    // 我们会在实际发送交易时使用 fallback 机制
+    // 检查钱包连接，如果未连接则弹出连接钱包弹框
     if (!walletState.value?.connected || !walletState.value?.publicKey) {
-      message.error(t('wallet.connectWallet'));
+      showWalletSelector.value = true;
       return;
     }
 
@@ -307,19 +306,8 @@ defineOptions({
 
 <template>
   <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] min-h-full flex flex-col">
-    <!-- 未连接钱包提示 -->
-    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px] flex-1">
-      <div class="text-center">
-        <div class="mb-6 animate-bounce">
-          <WalletOutlined class="text-6xl text-white/30" />
-        </div>
-        <h3 class="text-2xl font-bold text-white mb-2">{{ t('createToken.connectWalletFirst') }}</h3>
-        <p class="text-white/60">{{ t('createToken.connectWalletDesc') }}</p>
-      </div>
-    </div>
-
     <!-- 成功状态 -->
-    <div v-else-if="createdTokenMint" class="flex-1 flex flex-col min-h-0 py-3">
+    <div v-if="createdTokenMint" class="flex-1 flex flex-col min-h-0 py-3">
       <div
         class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(82,196,26,0.3)] rounded-2xl p-6 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(82,196,26,0.5)] hover:shadow-[0_20px_40px_rgba(82,196,26,0.2)]">
         <div
@@ -494,6 +482,9 @@ defineOptions({
         </div>
       </div>
     </div>
+
+    <!-- 钱包选择器模态框 -->
+    <WalletSelectorModal v-model:open="showWalletSelector" />
   </div>
 </template>
 
@@ -568,4 +559,5 @@ defineOptions({
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: rgba(255, 255, 255, 0.4) !important;
 }
+
 </style> 

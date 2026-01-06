@@ -16,7 +16,6 @@ import {
   UnlockOutlined,
   CopyOutlined,
   InfoCircleOutlined,
-  WalletOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
   GlobalOutlined,
@@ -25,6 +24,7 @@ import {
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
 import MintAddressInput from '../../components/MintAddressInput.vue';
+import WalletSelectorModal from '../../components/WalletSelectorModal.vue';
 
 const { t } = useI18n();
 
@@ -74,15 +74,17 @@ const isValidSolanaAddress = (address: string): boolean => {
   }
 };
 
-// 验证函数
+// 验证函数（移除钱包连接检查，允许未连接时查看页面）
 const isFormValid = computed(() => {
   const hasMintAddress = tokenMintAddress.value.trim() !== '';
   const hasWalletAddress = targetWalletAddress.value.trim() !== '' && isValidSolanaAddress(targetWalletAddress.value);
-  const isConnected = walletState.value?.connected && walletState.value?.publicKey !== null;
   const hasAuthority = hasFreezeAuthority.value;
   
-  return hasMintAddress && hasWalletAddress && isConnected && hasAuthority && accountInfo.value !== null;
+  return hasMintAddress && hasWalletAddress && hasAuthority && accountInfo.value !== null;
 });
+
+// 钱包选择器
+const showWalletSelector = ref(false);
 
 // 格式化地址
 const formatAddress = (address: string) => {
@@ -209,8 +211,9 @@ const handleOperation = async () => {
     return;
   }
 
+  // 检查钱包连接，如果未连接则弹出连接钱包弹框
   if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
-    message.error(t('wallet.connectWallet'));
+    showWalletSelector.value = true;
     return;
   }
 
@@ -236,12 +239,12 @@ const handleOperation = async () => {
 // 执行操作
 const executeOperation = async () => {
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error(t('wallet.connectWallet'));
+    showWalletSelector.value = true;
     return;
   }
 
   if (!walletState.value?.wallet) {
-    message.error(t('wallet.connectWallet'));
+    showWalletSelector.value = true;
     return;
   }
 
@@ -490,19 +493,8 @@ defineOptions({
 
 <template>
   <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] min-h-full flex flex-col">
-    <!-- 未连接钱包提示 -->
-    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px] flex-1">
-      <div class="text-center">
-        <div class="mb-6 animate-bounce">
-          <WalletOutlined class="text-6xl text-white/30" />
-        </div>
-        <h3 class="text-2xl font-bold text-white mb-2">{{ t('freezeManage.connectWalletFirst') }}</h3>
-        <p class="text-white/60">{{ t('freezeManage.connectWalletDesc') }}</p>
-      </div>
-    </div>
-
     <!-- 成功状态 -->
-    <div v-else-if="operationSuccess" class="flex-1 flex flex-col min-h-0 py-3">
+    <div v-if="operationSuccess" class="flex-1 flex flex-col min-h-0 py-3">
       <div
         class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border-2 border-[rgba(82,196,26,0.3)] rounded-2xl p-6 overflow-hidden transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(82,196,26,0.5)] hover:shadow-[0_20px_40px_rgba(82,196,26,0.2)]">
         <div
@@ -825,6 +817,9 @@ defineOptions({
         </div>
     </div>
     </div>
+
+    <!-- 钱包选择器模态框 -->
+    <WalletSelectorModal v-model:open="showWalletSelector" />
   </div>
 </template>
 

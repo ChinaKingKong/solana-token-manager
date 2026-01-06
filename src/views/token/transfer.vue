@@ -20,6 +20,7 @@ import {
 } from '@ant-design/icons-vue';
 import { useWallet } from '../../hooks/useWallet';
 import MintAddressInput from '../../components/MintAddressInput.vue';
+import WalletSelectorModal from '../../components/WalletSelectorModal.vue';
 
 const { t } = useI18n();
 
@@ -58,16 +59,18 @@ const isValidSolanaAddress = (address: string): boolean => {
   }
 };
 
-// 验证函数
+// 验证函数（移除钱包连接检查，允许未连接时查看页面）
 const isFormValid = computed(() => {
   const hasMintAddress = tokenMintAddress.value.trim() !== '';
   const hasRecipient = recipientAddress.value.trim() !== '' && isValidSolanaAddress(recipientAddress.value);
   const hasAmount = transferAmount.value && parseFloat(transferAmount.value) > 0;
-  const isConnected = walletState.value?.connected && walletState.value?.publicKey !== null;
   const hasEnoughBalance = parseFloat(transferAmount.value || '0') <= senderBalance.value;
   
-  return hasMintAddress && hasRecipient && hasAmount && isConnected && hasEnoughBalance;
+  return hasMintAddress && hasRecipient && hasAmount && hasEnoughBalance;
 });
+
+// 钱包选择器
+const showWalletSelector = ref(false);
 
 // 格式化地址
 const formatAddress = (address: string) => {
@@ -150,13 +153,14 @@ const handleTransfer = async () => {
     return;
   }
 
+  // 检查钱包连接，如果未连接则弹出连接钱包弹框
   if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    message.error(t('wallet.connectWallet'));
+    showWalletSelector.value = true;
     return;
   }
 
   if (!walletState.value?.wallet) {
-    message.error(t('wallet.connectWallet'));
+    showWalletSelector.value = true;
     return;
   }
 
@@ -414,19 +418,8 @@ defineOptions({
 
 <template>
   <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] min-h-full flex flex-col">
-    <!-- 未连接钱包提示 -->
-    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px] flex-1">
-      <div class="text-center">
-        <div class="mb-6 animate-bounce">
-          <WalletOutlined class="text-6xl text-white/30" />
-        </div>
-        <h3 class="text-2xl font-bold text-white mb-2">{{ t('transferToken.connectWalletFirst') }}</h3>
-        <p class="text-white/60">{{ t('transferToken.connectWalletDesc') }}</p>
-      </div>
-    </div>
-
     <!-- 转账表单 -->
-    <div v-else class="w-full py-3">
+    <div class="w-full py-3">
       <div
         class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border border-white/10 rounded-2xl p-6 overflow-visible transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]">
         <div
@@ -608,6 +601,52 @@ defineOptions({
         </div>
       </div>
     </div>
+
+    <!-- 钱包选择器模态框 -->
+    <a-modal
+      v-model:open="showWalletSelector"
+      :title="t('wallet.connectWallet')"
+      :footer="null"
+      width="360px"
+      class="wallet-selector-modal"
+    >
+      <div class="wallet-list-container">
+        <template v-for="(wallet, index) in availableWallets" :key="wallet.name">
+          <div
+            class="flex items-center justify-between px-4 py-[18px] bg-transparent cursor-pointer transition-all duration-200 ease-in-out hover:bg-white/5 active:bg-white/[0.06]"
+            @click="handleSelectWallet(wallet)"
+          >
+            <div class="flex items-center gap-3.5 flex-1">
+              <div class="w-14 h-14 flex items-center justify-center shrink-0 bg-white/5 rounded-full p-2">
+                <img
+                  v-if="wallet.icon"
+                  :src="wallet.icon"
+                  :alt="wallet.name"
+                  class="w-full h-full object-contain"
+                />
+                <div v-else class="w-full h-full flex items-center justify-center bg-gradient-solana rounded-full text-lg font-bold text-white">
+                  {{ wallet.name.charAt(0) }}
+                </div>
+              </div>
+              <div class="text-[15px] font-semibold text-white">{{ wallet.name }}</div>
+            </div>
+            <div class="shrink-0">
+              <div class="text-[13px] font-medium text-solana-green px-3.5 py-1.5 rounded-md bg-[rgba(20,241,149,0.1)] transition-all duration-200 ease-in-out group-hover:bg-[rgba(20,241,149,0.15)] group-hover:text-solana-green">Connect</div>
+            </div>
+          </div>
+          <div
+            v-if="index < availableWallets.length - 1"
+            class="wallet-divider"
+          ></div>
+        </template>
+      </div>
+
+      <div class="mt-6 pt-5 border-t border-white/8">
+        <p class="text-center m-0">
+          <small class="text-white/50 text-xs leading-relaxed">如果没有安装钱包，请先安装支持的浏览器扩展</small>
+        </p>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -678,4 +717,5 @@ defineOptions({
 :deep(.ant-btn:not(.ant-btn-primary):disabled) {
   color: rgba(255, 255, 255, 0.4) !important;
 }
+
 </style>

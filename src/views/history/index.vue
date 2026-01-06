@@ -478,19 +478,8 @@ defineOptions({
 
 <template>
   <div class="p-0 w-full max-w-full animate-[fadeIn_0.3s_ease-in] min-h-full flex flex-col">
-    <!-- 未连接钱包提示 -->
-    <div v-if="!walletState || !walletState.connected" class="flex items-center justify-center min-h-[400px] flex-1">
-      <div class="text-center">
-        <div class="mb-6 animate-bounce">
-          <WalletOutlined class="text-6xl text-white/30" />
-        </div>
-        <h3 class="text-2xl font-bold text-white mb-2">{{ t('transactionHistory.connectWalletFirst') }}</h3>
-        <p class="text-white/60">{{ t('transactionHistory.connectWalletDesc') }}</p>
-      </div>
-    </div>
-
     <!-- 交易历史内容 -->
-    <div v-else class="w-full py-3">
+    <div class="w-full py-3">
       <div
         class="relative bg-gradient-to-br from-[rgba(26,34,53,0.9)] to-[rgba(11,19,43,0.9)] border border-white/10 rounded-2xl p-6 overflow-visible transition-all duration-[400ms] ease-[cubic-bezier(0.4,0,0.2,1)] backdrop-blur-[20px] hover:border-[rgba(20,241,149,0.3)] hover:shadow-[0_8px_32px_rgba(20,241,149,0.15)]">
         <div
@@ -503,8 +492,9 @@ defineOptions({
       <a-button
         type="primary"
         :loading="loading"
+        :disabled="!walletState || !walletState.connected"
         @click="fetchTransactionHistory(true)"
-              class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-2.5 h-auto text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300">
+              class="flex items-center justify-center bg-gradient-solana border-none text-dark-bg font-semibold px-6 py-2.5 h-auto text-[15px] hover:-translate-y-0.5 hover:shadow-[0_6px_20px_rgba(20,241,149,0.4)] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
         <template #icon>
           <ReloadOutlined />
         </template>
@@ -562,8 +552,17 @@ defineOptions({
             </div>
           </div>
 
+          <!-- 未连接钱包提示 -->
+          <div v-if="!walletState || !walletState.connected" class="text-center py-12">
+            <div class="mb-6 animate-bounce">
+              <WalletOutlined class="text-6xl text-white/30" />
+            </div>
+            <h3 class="text-2xl font-bold text-white mb-2">{{ t('transactionHistory.connectWalletFirst') }}</h3>
+            <p class="text-white/60">{{ t('transactionHistory.connectWalletDesc') }}</p>
+          </div>
+
           <!-- 交易列表 -->
-          <div v-if="transactions.length > 0" class="space-y-3">
+          <div v-else-if="transactions.length > 0" class="space-y-3">
             <div
               v-for="tx in paginatedTransactions"
               :key="tx.signature"
@@ -608,7 +607,7 @@ defineOptions({
           </div>
 
           <!-- 空状态 -->
-          <div v-else class="text-center py-12">
+          <div v-else-if="walletState && walletState.connected" class="text-center py-12">
             <HistoryOutlined class="text-6xl text-white/30 mb-4" />
             <p class="text-white/60">{{ t('transactionHistory.empty') }}</p>
           </div>
