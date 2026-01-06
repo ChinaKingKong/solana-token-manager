@@ -525,7 +525,7 @@ defineOptions({
               class="bg-white/5 border-white/20 rounded-xl"
       >
               <p class="ant-upload-drag-icon text-white/60">
-                <InboxOutlined class="text-4xl" />
+                <InboxOutlined class="text-4xl upload-icon-gray" />
         </p>
               <p class="ant-upload-text text-white">{{ t('ipfsUpload.dragFileHere') }}</p>
               <p class="ant-upload-hint text-white/70">
@@ -741,6 +741,16 @@ defineOptions({
 :deep(.ant-upload-drag:hover) {
   border-color: rgba(20, 241, 149, 0.5) !important;
   background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* 上传图标灰色样式 */
+:deep(.ant-upload-drag-icon),
+:deep(.ant-upload-drag-icon .anticon),
+:deep(.ant-upload-drag-icon svg),
+.upload-icon-gray,
+.upload-icon-gray svg {
+  color: #9ca3af !important;
+  fill: #9ca3af !important;
 }
 
 :deep(.ant-upload-text) {
