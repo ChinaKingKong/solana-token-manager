@@ -67,14 +67,17 @@ const isFormValid = computed(() => {
       return;
     }
 
-    // 直接使用 walletState，不做复杂检查
-    if (!walletState.value?.connected || !walletState.value?.publicKey || !walletState.value?.wallet) {
+    // 放宽检查：只需要 connected 和 publicKey，不强制要求 wallet 实例
+    // 因为钱包可能在页面刷新后重连，但适配器实例可能不同步
+    // 我们会在实际发送交易时使用 fallback 机制
+    if (!walletState.value?.connected || !walletState.value?.publicKey) {
       message.error(t('wallet.connectWallet'));
       return;
     }
 
     const publicKey = walletState.value.publicKey;
-    const wallet = walletState.value.wallet;
+    // wallet 可能为空，但我们在发送交易时有 fallback 机制
+    const wallet = walletState.value?.wallet;
     
     // 确保钱包适配器有 publicKey（对于某些钱包适配器，可能需要从 walletState 获取）
     // 注意：某些钱包适配器的 publicKey 是只读的，所以这里只是检查

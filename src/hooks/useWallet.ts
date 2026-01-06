@@ -78,12 +78,91 @@ export function useWalletProvider() {
     }
   };
 
-  // 支持的钱包列表
-  // 注意：钱包适配器在创建时不会自动连接，需要在页面加载时手动检查
-  const supportedWallets = [
+  // 支持的钱包类型
+  // 注意：钱包适配器在需要时动态创建，而不是使用静态实例
+  // 这样可以避免页面刷新后适配器实例与 window.solana 不同步的问题
+  const createWalletAdapter = (walletName: string) => {
+    switch (walletName) {
+      case 'Phantom':
+        return new PhantomWalletAdapter();
+      case 'Coinbase':
+        return new CoinbaseWalletAdapter();
+      default:
+        return null;
+    }
+  };
+
+  // 创建 Phantom 的直接包装对象（用于重连场景）
+  // 直接使用 window.solana，避免适配器实例的同步问题
+  const createPhantomDirectAdapter = () => {
+    const phantom = (window as any).solana;
+    if (!phantom) return null;
+
+    // 从 supportedWallets 中获取 Phantom 的 icon（确保使用正确的 URL）
+    const phantomAdapter = supportedWallets.find((w: any) => w.name === 'Phantom');
+    const phantomIcon = phantomAdapter?.icon || 'https://raw.githubusercontent.com/solana-labs/wallet-adapter/master/packages/wallets/icons/phantom.svg';
+
+    return {
+      name: 'Phantom',
+      url: 'https://phantom.app',
+      icon: phantomIcon,
+
+      // 直接使用 window.solana 的方法
+      sendTransaction: async (transaction: any, connection: any) => {
+        return await phantom.sendTransaction(transaction, connection);
+      },
+
+      signTransaction: async (transaction: any) => {
+        return await phantom.signTransaction(transaction);
+      },
+
+      signAllTransactions: async (transactions: any[]) => {
+        return await phantom.signAllTransactions(transactions);
+      },
+
+      connect: async () => {
+        return await phantom.connect();
+      },
+
+      disconnect: async () => {
+        return await phantom.disconnect();
+      },
+
+      // 只读属性
+      get publicKey() {
+        return phantom.publicKey;
+      },
+
+      get connected() {
+        return phantom.isConnected;
+      },
+
+      get readyState() {
+        return phantom.readyState || 'Installed';
+      },
+
+      // 事件监听
+      on: (event: string, callback: any) => {
+        if (phantom.on) {
+          return phantom.on(event, callback);
+        }
+      },
+
+      off: (event: string, callback: any) => {
+        if (phantom.off) {
+          return phantom.off(event, callback);
+        }
+      }
+    };
+  };
+
+  // 获取所有支持的钱包适配器（用于显示可用钱包列表）
+  const getSupportedWallets = () => [
     new PhantomWalletAdapter(),
     new CoinbaseWalletAdapter(),
   ];
+
+  const supportedWallets = getSupportedWallets();
 
   // 钱包事件监听器引用（用于清理）
   let walletEventListeners: Array<() => void> = [];
@@ -211,7 +290,7 @@ export function useWalletProvider() {
           const newKey = newPublicKey?.toBase58();
           const oldKey = oldPublicKey?.toBase58();
           const currentKey = publicKey.value?.toBase58();
-          
+
           // 只有当 publicKey 确实发生变化时才更新
           if (newKey !== oldKey && newKey !== currentKey) {
             if (newPublicKey) {
@@ -327,11 +406,14 @@ export function useWalletProvider() {
 
       // 清除手动断开标志（用户主动连接，允许自动连接）
       localStorage.removeItem('solana-wallet-manually-disconnected');
-      
+
       // 保存连接的钱包名称到 localStorage
       if (walletAdapter.name) {
         localStorage.setItem('solana-wallet-name', walletAdapter.name);
       }
+
+      // 保存连接时间戳（用于2小时后过期检查）
+      localStorage.setItem('solana-wallet-connect-time', Date.now().toString());
 
       // 设置事件监听器
       setupWalletListeners(walletAdapter);
@@ -347,75 +429,111 @@ export function useWalletProvider() {
     }
   };
 
+  // 检查钱包连接是否过期（超过2小时需要重新连接）
+  const isWalletConnectionExpired = () => {
+    const connectTime = localStorage.getItem('solana-wallet-connect-time');
+    if (!connectTime) {
+      // 如果没有保存连接时间，认为已过期（旧版本兼容）
+      return true;
+    }
+
+    const currentTime = Date.now();
+    const timeDiff = currentTime - parseInt(connectTime);
+    const twoHoursInMs = 2 * 60 * 60 * 1000; // 2小时的毫秒数
+
+    return timeDiff > twoHoursInMs;
+  };
+
+  // 清除过期的连接信息
+  const clearExpiredConnection = () => {
+    localStorage.removeItem('solana-wallet-name');
+    localStorage.removeItem('solana-wallet-connect-time');
+  };
+
   // 检查钱包适配器是否已经连接
   const checkWalletConnection = async () => {
     // 如果用户手动断开过，不再自动连接
     if (localStorage.getItem('solana-wallet-manually-disconnected') === 'true') {
       return false;
     }
-    
-    for (const walletAdapter of supportedWallets) {
-        // 检查钱包适配器是否已经有 publicKey（表示已连接）
-        if (walletAdapter.publicKey) {
-          // 先设置状态，再设置事件监听器，避免监听器误触发
-          wallet.value = walletAdapter;
-          publicKey.value = walletAdapter.publicKey;
-          connected.value = true;
-          
-          // 等待一小段时间，确保状态已设置
-          await new Promise(resolve => setTimeout(resolve, 50));
-          
-          // 设置事件监听器
-          setupWalletListeners(walletAdapter);
-          
-          // 获取余额
-          await fetchBalance();
-          
-          // 保存钱包名称
-          if (walletAdapter.name) {
-            localStorage.setItem('solana-wallet-name', walletAdapter.name);
-          }
-          
-          return true;
-        }
-      
-      // 对于 Phantom，检查 window.solana
-      if (walletAdapter.name === 'Phantom') {
-        const phantom = (window as any).solana;
-        if (phantom) {
-          // 检查 Phantom 是否已经连接
-          // 同时检查 isConnected 和 publicKey，确保钱包确实已连接
-          try {
-            const isConnected = phantom.isConnected === true;
-            const hasPublicKey = phantom.publicKey !== null && phantom.publicKey !== undefined;
-            
-            if (isConnected && hasPublicKey) {
-              // Phantom 已经连接，直接使用
-              // 先设置状态，再设置事件监听器，避免监听器误触发
-              wallet.value = walletAdapter;
-              publicKey.value = phantom.publicKey;
-              connected.value = true;
-              
-              // 等待一小段时间，确保状态已设置
-              await new Promise(resolve => setTimeout(resolve, 50));
-              
-              // 设置事件监听器
-              setupWalletListeners(walletAdapter);
-              
-              // 获取余额
-              await fetchBalance();
-              
-              // 保存钱包名称
-              localStorage.setItem('solana-wallet-name', walletAdapter.name);
-              
-              return true;
-            }
-          } catch (error) {
-            // 获取 publicKey 失败，继续尝试其他方法
+
+    // 检查连接是否已过期（超过2小时）
+    if (isWalletConnectionExpired()) {
+      // 清除过期的连接信息
+      clearExpiredConnection();
+      return false;
+    }
+
+    // 对于 Phantom，检查 window.solana（优先检查，因为这是最常见的重连场景）
+    const phantom = (window as any).solana;
+    if (phantom) {
+      try {
+        const isConnected = phantom.isConnected === true;
+        const hasPublicKey = phantom.publicKey !== null && phantom.publicKey !== undefined;
+
+        if (isConnected && hasPublicKey) {
+          // Phantom 已经连接，使用直接包装对象（避免适配器实例同步问题）
+          const directAdapter = createPhantomDirectAdapter();
+          if (directAdapter) {
+            // 先设置状态，再设置事件监听器，避免监听器误触发
+            wallet.value = directAdapter;
+            publicKey.value = phantom.publicKey;
+            connected.value = true;
+
+            // 等待一小段时间，确保状态已设置
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // 设置事件监听器
+            setupWalletListeners(directAdapter);
+
+            // 获取余额
+            await fetchBalance();
+
+            // 保存钱包名称和更新连接时间戳
+            localStorage.setItem('solana-wallet-name', 'Phantom');
+            localStorage.setItem('solana-wallet-connect-time', Date.now().toString());
+
+            return true;
           }
         }
+      } catch (error) {
+        // 静默处理错误
       }
     }
+
+    // 检查其他钱包适配器是否已经有 publicKey（表示已连接）
+    for (const walletAdapter of supportedWallets) {
+      // 跳过 Phantom，因为上面已经检查过了
+      if (walletAdapter.name === 'Phantom') {
+        continue;
+      }
+
+      // 检查钱包适配器是否已经有 publicKey
+      if (walletAdapter.publicKey) {
+        // 先设置状态，再设置事件监听器，避免监听器误触发
+        wallet.value = walletAdapter;
+        publicKey.value = walletAdapter.publicKey;
+        connected.value = true;
+
+        // 等待一小段时间，确保状态已设置
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // 设置事件监听器
+        setupWalletListeners(walletAdapter);
+
+        // 获取余额
+        await fetchBalance();
+
+        // 保存钱包名称和更新连接时间戳
+        if (walletAdapter.name) {
+          localStorage.setItem('solana-wallet-name', walletAdapter.name);
+          localStorage.setItem('solana-wallet-connect-time', Date.now().toString());
+        }
+
+        return true;
+      }
+    }
+
     return false;
   };
 
@@ -425,7 +543,14 @@ export function useWalletProvider() {
     if (localStorage.getItem('solana-wallet-manually-disconnected') === 'true') {
       return false;
     }
-    
+
+    // 检查连接是否已过期（超过2小时）
+    if (isWalletConnectionExpired()) {
+      // 清除过期的连接信息
+      clearExpiredConnection();
+      return false;
+    }
+
     // 首先检查钱包适配器是否已经连接
     if (await checkWalletConnection()) {
       return true;
@@ -441,93 +566,56 @@ export function useWalletProvider() {
     
     // 获取上次使用的钱包名称
     const savedWalletName = localStorage.getItem('solana-wallet-name');
-    
+
     if (savedWalletName) {
-      // 优先尝试连接上次使用的钱包
+      // 对于 Phantom，检查 window.solana（这是最常见的重连场景）
+      if (savedWalletName === 'Phantom') {
+        const phantom = (window as any).solana;
+        if (phantom) {
+          try {
+            const isConnected = phantom.isConnected === true;
+            const hasPublicKey = phantom.publicKey !== null && phantom.publicKey !== undefined;
+
+            if (isConnected && hasPublicKey) {
+              // Phantom 已经连接，使用直接包装对象
+              const directAdapter = createPhantomDirectAdapter();
+              if (directAdapter) {
+                // 先设置状态，再设置事件监听器，避免监听器误触发
+                wallet.value = directAdapter;
+                publicKey.value = phantom.publicKey;
+                connected.value = true;
+
+                // 等待一小段时间，确保状态已设置
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                // 设置事件监听器
+                setupWalletListeners(directAdapter);
+
+                // 获取余额
+                await fetchBalance();
+
+                // 更新连接时间戳
+                localStorage.setItem('solana-wallet-connect-time', Date.now().toString());
+
+                return true;
+              }
+            }
+          } catch (error) {
+            // 静默处理错误
+          }
+        } else {
+          // Phantom 未检测到，清除保存的状态
+          clearExpiredConnection();
+          return false;
+        }
+      }
+
+      // 对于其他钱包或 Phantom 未连接的情况，尝试连接
       const savedWallet = supportedWallets.find(w => w.name === savedWalletName);
       if (savedWallet) {
         try {
           // 检查钱包是否可用（已安装）
           if (savedWallet.readyState === 'Installed' || savedWallet.readyState === 'Loadable') {
-            // 对于 Phantom，再次检查是否已经连接
-            if (savedWallet.name === 'Phantom') {
-              const phantom = (window as any).solana;
-              if (phantom) {
-                // 检查 Phantom 是否已经连接（同时检查 isConnected 和 publicKey）
-                try {
-                  const isConnected = phantom.isConnected === true;
-                  const hasPublicKey = phantom.publicKey !== null && phantom.publicKey !== undefined;
-                  
-                  if (isConnected && hasPublicKey) {
-                    // Phantom 已经连接，直接使用
-                    // 先设置状态，再设置事件监听器，避免监听器误触发
-                    wallet.value = savedWallet;
-                    publicKey.value = phantom.publicKey;
-                    connected.value = true;
-                    
-                    // 等待一小段时间，确保状态已设置
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                    
-                    // 设置事件监听器
-                    setupWalletListeners(savedWallet);
-                    
-                    // 获取余额
-                    await fetchBalance();
-                    
-                    return true;
-                  }
-                } catch (error) {
-                  // 获取 publicKey 失败，继续尝试其他方法
-                }
-              } else {
-                // Phantom 未检测到，清除保存的状态
-                localStorage.removeItem('solana-wallet-name');
-                return false;
-              }
-            }
-            
-            // 对于 Phantom，如果 window.solana 存在但没有连接，尝试连接
-            if (savedWallet.name === 'Phantom') {
-              const phantom = (window as any).solana;
-              if (phantom) {
-                try {
-                  const isConnected = phantom.isConnected === true;
-                  const hasPublicKey = phantom.publicKey !== null && phantom.publicKey !== undefined;
-                  
-                  // 如果 Phantom 没有连接（isConnected 为 false 或没有 publicKey），尝试连接
-                  if (!isConnected || !hasPublicKey) {
-                    // Phantom 存在但没有连接，尝试使用适配器的 connect 方法
-                    // 注意：这可能需要用户授权
-                    try {
-                      // 先尝试调用适配器的 connect（如果之前已授权，可能会自动连接）
-                      await savedWallet.connect();
-                      if (savedWallet.publicKey) {
-                        // 先设置状态，再设置事件监听器，避免监听器误触发
-                        wallet.value = savedWallet;
-                        publicKey.value = savedWallet.publicKey;
-                        connected.value = true;
-                        
-                        // 等待一小段时间，确保状态已设置
-                        await new Promise(resolve => setTimeout(resolve, 50));
-                        
-                        // 设置事件监听器
-                        setupWalletListeners(savedWallet);
-                        
-                        // 获取余额
-                        await fetchBalance();
-                        
-                        return true;
-                      }
-                    } catch (error) {
-                      // 连接失败（可能需要用户授权），不清除保存的状态
-                    }
-                  }
-                } catch (error) {
-                  // 检查失败，继续尝试其他方法
-                }
-              }
-            }
-            
             // 尝试使用钱包适配器的 autoConnect 方法（如果存在）
             if (typeof savedWallet.autoConnect === 'function') {
               try {
@@ -537,23 +625,23 @@ export function useWalletProvider() {
                   wallet.value = savedWallet;
                   publicKey.value = savedWallet.publicKey;
                   connected.value = true;
-                  
+
                   // 等待一小段时间，确保状态已设置
                   await new Promise(resolve => setTimeout(resolve, 50));
-                  
+
                   // 设置事件监听器
                   setupWalletListeners(savedWallet);
-                  
+
                   // 获取余额
                   await fetchBalance();
-                  
+
                   return true;
                 }
               } catch (error) {
                 // autoConnect 失败，尝试手动连接
               }
             }
-            
+
             // 如果 autoConnect 不可用或失败，尝试手动连接
             // 注意：这可能需要用户授权，所以可能会失败
             try {
@@ -575,7 +663,7 @@ export function useWalletProvider() {
         localStorage.removeItem('solana-wallet-name');
       }
     }
-    
+
     return false;
   };
 
@@ -587,17 +675,18 @@ export function useWalletProvider() {
     try {
       // 清理事件监听器
       cleanupWalletListeners();
-      
+
       await wallet.value.disconnect();
       wallet.value = null;
       publicKey.value = null;
       connected.value = false;
       balance.value = 0;
-      
+
       // 记录这是用户手动断开的，刷新页面时不再自动连接
       localStorage.setItem('solana-wallet-manually-disconnected', 'true');
-      // 清除保存的钱包名称
+      // 清除保存的钱包名称和连接时间戳
       localStorage.removeItem('solana-wallet-name');
+      localStorage.removeItem('solana-wallet-connect-time');
     } catch (error) {
       throw error;
     } finally {
@@ -625,6 +714,18 @@ export function useWalletProvider() {
   // 发送交易
   const sendTransaction = async (transaction: any) => {
     if (!wallet.value) {
+      // Fallback: 如果 wallet.value 为空，尝试直接使用 window.solana
+      const phantom = (window as any).solana;
+      if (phantom && phantom.isConnected && phantom.publicKey && phantom.sendTransaction) {
+        try {
+          const signature = await phantom.sendTransaction(transaction, connection.value);
+          await connection.value.confirmTransaction(signature);
+          return signature;
+        } catch (error) {
+          throw error;
+        }
+      }
+
       throw new Error('钱包未连接');
     }
 
@@ -633,6 +734,20 @@ export function useWalletProvider() {
       await connection.value.confirmTransaction(signature);
       return signature;
     } catch (error) {
+      // Fallback: 如果适配器的 sendTransaction 失败，尝试直接使用 window.solana
+      if (wallet.value?.name === 'Phantom') {
+        const phantom = (window as any).solana;
+        if (phantom && phantom.isConnected && phantom.publicKey && phantom.sendTransaction) {
+          try {
+            const signature = await phantom.sendTransaction(transaction, connection.value);
+            await connection.value.confirmTransaction(signature);
+            return signature;
+          } catch (fallbackError) {
+            throw error; // 抛出原始错误
+          }
+        }
+      }
+
       throw error;
     }
   };
@@ -640,12 +755,32 @@ export function useWalletProvider() {
   // 签名交易
   const signTransaction = async (transaction: any) => {
     if (!wallet.value) {
+      // Fallback: 如果 wallet.value 为空，尝试直接使用 window.solana
+      const phantom = (window as any).solana;
+      if (phantom && phantom.isConnected && phantom.publicKey && phantom.signTransaction) {
+        try {
+          return await phantom.signTransaction(transaction);
+        } catch (error) {
+          throw error;
+        }
+      }
       throw new Error('钱包未连接');
     }
 
     try {
       return await wallet.value.signTransaction(transaction);
     } catch (error) {
+      // Fallback: 如果适配器的 signTransaction 失败，尝试直接使用 window.solana
+      if (wallet.value?.name === 'Phantom') {
+        const phantom = (window as any).solana;
+        if (phantom && phantom.isConnected && phantom.publicKey && phantom.signTransaction) {
+          try {
+            return await phantom.signTransaction(transaction);
+          } catch (fallbackError) {
+            throw error; // 抛出原始错误
+          }
+        }
+      }
       throw error;
     }
   };
