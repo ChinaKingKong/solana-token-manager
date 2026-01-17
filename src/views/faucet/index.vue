@@ -3,9 +3,8 @@ import { ref, computed, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import { useI18n } from 'vue-i18n';
 import { useWallet } from '../../hooks/useWallet';
-import WalletSelectorModal from '../../components/WalletSelectorModal.vue';
 import { ReloadOutlined, CheckCircleOutlined, CopyOutlined, GiftOutlined } from '@ant-design/icons-vue';
-import { Connection } from '@solana/web3.js';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 const { t } = useI18n();
 
@@ -13,7 +12,11 @@ const { t } = useI18n();
 const walletContext = useWallet();
 const walletState = walletContext.walletState;
 const network = walletContext.network;
-const fetchBalance = walletContext.fetchBalance;
+
+// 手动输入的钱包地址
+const walletAddressInput = ref('');
+const balance = ref(0);
+const loadingBalance = ref(false);
 
 // 状态
 const requesting = ref(false);
@@ -21,10 +24,33 @@ const lastRequestTime = ref<Date | null>(null);
 const requestCount = ref(0);
 
 
-// 检查是否可以请求（移除钱包连接检查，允许未连接时查看页面）
+// 验证Solana地址格式
+const isValidSolanaAddress = (address: string): boolean => {
+  try {
+    new PublicKey(address);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+// 获取当前使用的钱包地址（优先使用手动输入的地址，否则使用连接的钱包地址）
+const currentWalletAddress = computed(() => {
+  if (walletAddressInput.value.trim()) {
+    return walletAddressInput.value.trim();
+  }
+  return walletState.value?.publicKey?.toBase58() || '';
+});
+
+// 检查是否可以请求
 const canRequest = computed(() => {
   // 检查网络是否为测试网
   if (network.value !== 'devnet') {
+    return false;
+  }
+  
+  // 检查是否有有效的钱包地址
+  if (!currentWalletAddress.value || !isValidSolanaAddress(currentWalletAddress.value)) {
     return false;
   }
   
@@ -38,9 +64,6 @@ const canRequest = computed(() => {
   
   return true;
 });
-
-// 钱包选择器
-const showWalletSelector = ref(false);
 
 // 获取冷却时间剩余
 const cooldownRemaining = computed(() => {
@@ -57,6 +80,26 @@ const cooldownRemaining = computed(() => {
   return { hours, minutes };
 });
 
+// 获取余额（基于当前使用的钱包地址）
+const fetchBalance = async () => {
+  if (!currentWalletAddress.value || !isValidSolanaAddress(currentWalletAddress.value)) {
+    balance.value = 0;
+    return;
+  }
+
+  loadingBalance.value = true;
+  try {
+    const publicKey = new PublicKey(currentWalletAddress.value);
+    const faucetConnection = new Connection('https://api.devnet.solana.com', 'confirmed');
+    const balanceLamports = await faucetConnection.getBalance(publicKey);
+    balance.value = balanceLamports / LAMPORTS_PER_SOL;
+  } catch (error) {
+    balance.value = 0;
+  } finally {
+    loadingBalance.value = false;
+  }
+};
+
 // 请求测试SOL
 const requestTestSol = async () => {
   // 首先检查网络是否为测试网
@@ -65,9 +108,9 @@ const requestTestSol = async () => {
     return;
   }
 
-  // 检查钱包连接，如果未连接则弹出连接钱包弹框
-  if (!walletState.value?.connected || !walletState.value?.publicKey) {
-    showWalletSelector.value = true;
+  // 检查是否有有效的钱包地址
+  if (!currentWalletAddress.value || !isValidSolanaAddress(currentWalletAddress.value)) {
+    message.error('请输入有效的钱包地址');
     return;
   }
 
@@ -82,7 +125,7 @@ const requestTestSol = async () => {
   requesting.value = true;
 
   try {
-    const publicKey = walletState.value.publicKey!;
+    const publicKey = new PublicKey(currentWalletAddress.value);
 
     // 确保使用测试网RPC端点
     if (network.value !== 'devnet') {
@@ -131,7 +174,7 @@ const requestTestSol = async () => {
     // 等待一下再刷新余额，确保余额已更新
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // 刷新余额（使用原始连接）
+    // 刷新余额
     await fetchBalance();
     
     message.success(t('faucet.requestSuccess'));
@@ -185,9 +228,9 @@ const formatAddress = (address: string) => {
 
 // 获取当前钱包地址的localStorage键
 const getStorageKey = (key: string) => {
-  const publicKey = walletState.value?.publicKey?.toBase58();
-  if (!publicKey) return null;
-  return `faucet-${key}-${publicKey}`;
+  const address = currentWalletAddress.value;
+  if (!address) return null;
+  return `faucet-${key}-${address}`;
 };
 
 // 从localStorage加载历史记录（基于当前钱包地址）
@@ -238,21 +281,39 @@ const clearHistory = () => {
   requestCount.value = 0;
 };
 
-// 组件挂载时加载历史记录
-loadHistory();
-
 // 监听钱包地址变化（切换钱包时重置记录）
-watch(() => walletState.value?.publicKey?.toBase58(), (newPublicKey, oldPublicKey) => {
-  if (newPublicKey && oldPublicKey && newPublicKey !== oldPublicKey) {
-    // 钱包切换：清除旧记录，加载新钱包的记录
+watch(() => currentWalletAddress.value, (newAddress, oldAddress) => {
+  if (newAddress && oldAddress && newAddress !== oldAddress) {
+    // 钱包地址切换：清除旧记录，加载新钱包的记录
     clearHistory();
     loadHistory();
-  } else if (newPublicKey && !oldPublicKey) {
-    // 新连接：加载记录
+    // 刷新余额（仅当地址有效时）
+    if (isValidSolanaAddress(newAddress)) {
+      fetchBalance();
+    } else {
+      balance.value = 0;
+    }
+  } else if (newAddress && !oldAddress) {
+    // 新输入地址：加载记录
     loadHistory();
-  } else if (!newPublicKey && oldPublicKey) {
-    // 断开连接：清除记录
+    // 刷新余额（仅当地址有效时）
+    if (isValidSolanaAddress(newAddress)) {
+      fetchBalance();
+    } else {
+      balance.value = 0;
+    }
+  } else if (!newAddress && oldAddress) {
+    // 清除地址：清除记录
     clearHistory();
+    balance.value = 0;
+  }
+}, { immediate: true });
+
+// 监听连接的钱包地址变化，如果输入框为空则自动填充
+watch(() => walletState.value?.publicKey?.toBase58(), (newPublicKey) => {
+  if (newPublicKey && !walletAddressInput.value.trim()) {
+    // 如果输入框为空且钱包已连接，自动填充连接的钱包地址
+    // 但这里不自动填充，让用户选择是否使用连接的钱包
   }
 });
 
@@ -299,15 +360,28 @@ defineOptions({
             </div>
           </div>
 
-          <!-- 钱包信息 -->
+          <!-- 钱包地址输入 -->
           <div class="bg-white/5 rounded-xl p-4 border border-white/10 mb-6">
             <div class="text-xs font-medium text-white/60 mb-2">{{ t('faucet.walletAddress') }}</div>
-            <div class="flex items-center gap-2 px-4 py-2.5 bg-white/5 rounded-lg border border-white/10">
-              <div class="flex-1 text-sm font-mono text-white/90 break-all min-w-0">
-                {{ walletState.publicKey ? formatAddress(walletState.publicKey.toBase58()) : '' }}
-              </div>
+            <div class="flex items-center gap-2">
+              <a-input
+                v-model:value="walletAddressInput"
+                :placeholder="walletState.publicKey ? walletState.publicKey.toBase58() : '请输入钱包地址或连接钱包'"
+                class="flex-1"
+                size="large"
+                :class="['bg-white/5 border-white/10 text-white placeholder:text-white/40', isValidSolanaAddress(currentWalletAddress) || !currentWalletAddress ? '' : 'border-red-500']"
+              />
               <a-button
-                @click="copyAddress(walletState.publicKey?.toBase58() || '')"
+                v-if="walletState.publicKey"
+                @click="walletAddressInput = walletState.publicKey!.toBase58()"
+                type="text"
+                size="small"
+                class="flex items-center justify-center text-white px-3 py-1 h-auto transition-all duration-300 ease-in-out hover:text-solana-green flex-shrink-0 whitespace-nowrap">
+                使用连接的钱包
+              </a-button>
+              <a-button
+                v-if="currentWalletAddress"
+                @click="copyAddress(currentWalletAddress)"
                 type="text"
                 size="small"
                 class="flex items-center justify-center text-white px-2 py-1 h-auto transition-all duration-300 ease-in-out hover:text-solana-green flex-shrink-0">
@@ -316,17 +390,21 @@ defineOptions({
                 </template>
               </a-button>
             </div>
+            <div v-if="walletState.publicKey && !walletAddressInput" class="mt-2 text-xs text-white/50">
+              已连接钱包: {{ formatAddress(walletState.publicKey.toBase58()) }}
+            </div>
           </div>
 
           <!-- 余额信息 -->
-          <div class="bg-white/5 rounded-xl p-4 border border-white/10 mb-6">
+          <div v-if="currentWalletAddress && isValidSolanaAddress(currentWalletAddress)" class="bg-white/5 rounded-xl p-4 border border-white/10 mb-6">
             <div class="flex items-center justify-between">
               <div>
                 <div class="text-xs font-medium text-white/60 mb-1">{{ t('faucet.currentBalance') }}</div>
-                <div class="text-2xl font-bold text-solana-green">{{ walletState.balance?.toFixed(4) || '0.0000' }} SOL</div>
+                <div class="text-2xl font-bold text-solana-green">{{ balance.toFixed(4) || '0.0000' }} SOL</div>
               </div>
               <a-button
                 @click="fetchBalance"
+                :loading="loadingBalance"
                 type="text"
                 size="small"
                 class="flex items-center justify-center text-white px-3 py-1 h-auto transition-all duration-300 ease-in-out hover:text-solana-green">
@@ -373,7 +451,7 @@ defineOptions({
               {{ requesting ? t('faucet.requesting') : t('faucet.requestButton') }}
             </a-button>
 
-            <div v-if="!canRequest && walletState.connected && network === 'devnet'" class="text-center">
+            <div v-if="!canRequest && currentWalletAddress && isValidSolanaAddress(currentWalletAddress) && network === 'devnet'" class="text-center">
               <p class="text-sm text-white/60">{{ t('faucet.cooldownMessage', cooldownRemaining || { hours: 0, minutes: 0 }) }}</p>
             </div>
           </div>
@@ -396,8 +474,6 @@ defineOptions({
       </div>
     </div>
 
-    <!-- 钱包选择器模态框 -->
-    <WalletSelectorModal v-model:open="showWalletSelector" />
   </div>
 </template>
 
